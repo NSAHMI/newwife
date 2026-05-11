@@ -4,12 +4,15 @@
  * Tap a date to see entries for that day
  */
 
-import { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable } from 'react-native';
+import { useState, useMemo } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS } from '../../constants/theme';
+import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS, MOOD_CONFIG } from '../../constants/theme';
+import { useJournal } from '../../context/JournalContext';
+import { formatShortDate } from '../../utils/dateUtils';
+import { Entry } from '../../types/entry';
 
 /**
  * Marked date type for react-native-calendars
@@ -22,58 +25,19 @@ interface MarkedDateInfo {
 }
 
 /**
- * Placeholder marked dates for Phase 1
- * Will be replaced with actual data in Phase 7
- */
-const PLACEHOLDER_MARKED_DATES: Record<string, MarkedDateInfo> = {
-  '2026-05-11': { marked: true, dotColor: COLORS.accent },
-  '2026-05-10': { marked: true, dotColor: COLORS.accent },
-  '2026-05-08': { marked: true, dotColor: COLORS.accent },
-  '2026-05-05': { marked: true, dotColor: COLORS.accent },
-};
-
-/**
- * Placeholder entries for Phase 1
- */
-const PLACEHOLDER_ENTRIES = [
-  {
-    id: '1',
-    title: 'A Beautiful Morning',
-    mood: 'happy',
-    dateKey: '2026-05-11',
-  },
-  {
-    id: '2',
-    title: 'Reflections on Growth',
-    mood: 'grateful',
-    dateKey: '2026-05-10',
-  },
-];
-
-/**
- * Mood emoji mapping
- */
-const MOOD_EMOJI: Record<string, string> = {
-  happy: '😊',
-  calm: '😌',
-  sad: '😢',
-  angry: '😠',
-  anxious: '😰',
-  grateful: '🙏',
-};
-
-/**
  * Calendar screen component
  */
 export default function CalendarScreen() {
+  const { entries, markedDates, isLoading } = useJournal();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   /**
    * Get entries for the selected date
    */
-  const getEntriesForDate = (dateKey: string) => {
-    return PLACEHOLDER_ENTRIES.filter((entry) => entry.dateKey === dateKey);
-  };
+  const getEntriesForDate = useMemo(() => {
+    if (!selectedDate) return [];
+    return entries.filter((entry) => entry.dateKey === selectedDate);
+  }, [selectedDate, entries]);
 
   /**
    * Handle date selection
@@ -99,8 +63,8 @@ export default function CalendarScreen() {
   /**
    * Get marked dates with selected date highlight
    */
-  const getMarkedDates = () => {
-    const marked = { ...PLACEHOLDER_MARKED_DATES };
+  const getMarkedDatesWithSelection = useMemo(() => {
+    const marked: Record<string, MarkedDateInfo> = { ...markedDates };
     if (selectedDate) {
       marked[selectedDate] = {
         ...marked[selectedDate],
@@ -109,9 +73,46 @@ export default function CalendarScreen() {
       };
     }
     return marked;
-  };
+  }, [markedDates, selectedDate]);
 
-  const entriesForSelectedDate = selectedDate ? getEntriesForDate(selectedDate) : [];
+  /**
+   * Format the selected date for display
+   */
+  const formattedSelectedDate = useMemo(() => {
+    if (!selectedDate) return '';
+    const date = new Date(selectedDate + 'T12:00:00'); // Add time to avoid timezone issues
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }, [selectedDate]);
+
+  /**
+   * Get count of entries for each date for display
+   */
+  const getEntryCount = useMemo(() => {
+    const counts: Record<string, number> = {};
+    entries.forEach((entry) => {
+      counts[entry.dateKey] = (counts[entry.dateKey] || 0) + 1;
+    });
+    return counts;
+  }, [entries]);
+
+  /**
+   * Render loading state
+   */
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.accent} />
+          <Text style={styles.loadingText}>Loading calendar...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -120,7 +121,7 @@ export default function CalendarScreen() {
         <View style={styles.calendarContainer}>
           <Calendar
             onDayPress={handleDayPress}
-            markedDates={getMarkedDates()}
+            markedDates={getMarkedDatesWithSelection}
             theme={{
               backgroundColor: COLORS.surface,
               calendarBackground: COLORS.surface,
@@ -145,6 +146,19 @@ export default function CalendarScreen() {
           />
         </View>
 
+        {/* Stats Banner */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{entries.length}</Text>
+            <Text style={styles.statLabel}>Total Entries</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{Object.keys(getEntryCount).length}</Text>
+            <Text style={styles.statLabel}>Days with Entries</Text>
+          </View>
+        </View>
+
         {/* Entries for Selected Date */}
         <View style={styles.entriesContainer}>
           {!selectedDate ? (
@@ -152,7 +166,7 @@ export default function CalendarScreen() {
               <Ionicons name="calendar-outline" size={48} color={COLORS.border} />
               <Text style={styles.emptyText}>Select a date to view entries</Text>
             </View>
-          ) : entriesForSelectedDate.length === 0 ? (
+          ) : getEntriesForDate.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="document-text-outline" size={48} color={COLORS.border} />
               <Text style={styles.emptyText}>No entries for this day</Text>
@@ -169,24 +183,37 @@ export default function CalendarScreen() {
           ) : (
             <>
               <Text style={styles.entriesTitle}>
-                Entries for {selectedDate}
+                {formattedSelectedDate}
               </Text>
-              {entriesForSelectedDate.map((entry) => (
-                <Pressable
-                  key={entry.id}
-                  style={({ pressed }) => [
-                    styles.entryCard,
-                    pressed && styles.entryCardPressed,
-                  ]}
-                  onPress={() => handleEntryPress(entry.id)}
-                >
-                  <Text style={styles.moodEmoji}>{MOOD_EMOJI[entry.mood]}</Text>
-                  <Text style={styles.entryTitle} numberOfLines={1}>
-                    {entry.title}
-                  </Text>
-                  <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-                </Pressable>
-              ))}
+              <Text style={styles.entriesSubtitle}>
+                {getEntriesForDate.length} {getEntriesForDate.length === 1 ? 'entry' : 'entries'}
+              </Text>
+              {getEntriesForDate.map((entry: Entry) => {
+                const moodConfig = MOOD_CONFIG[entry.mood];
+                return (
+                  <Pressable
+                    key={entry.id}
+                    style={({ pressed }) => [
+                      styles.entryCard,
+                      pressed && styles.entryCardPressed,
+                    ]}
+                    onPress={() => handleEntryPress(entry.id)}
+                  >
+                    <View style={[styles.moodIndicator, { backgroundColor: moodConfig.color }]}>
+                      <Text style={styles.moodEmoji}>{moodConfig.emoji}</Text>
+                    </View>
+                    <View style={styles.entryContent}>
+                      <Text style={styles.entryTitle} numberOfLines={1}>
+                        {entry.title}
+                      </Text>
+                      <Text style={styles.entryPreview} numberOfLines={1}>
+                        {entry.body}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                  </Pressable>
+                );
+              })}
             </>
           )}
         </View>
@@ -200,6 +227,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xxl,
+  },
+  loadingText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.lg,
+  },
   calendarContainer: {
     margin: SPACING.lg,
     borderRadius: BORDER_RADIUS.lg,
@@ -209,6 +247,34 @@ const styles = StyleSheet.create({
   calendar: {
     borderRadius: BORDER_RADIUS.lg,
   },
+  statsContainer: {
+    flexDirection: 'row',
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    padding: SPACING.lg,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    ...SHADOWS.sm,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: FONT_SIZES.xxl,
+    fontWeight: '700',
+    color: COLORS.accent,
+  },
+  statLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: COLORS.border,
+    marginHorizontal: SPACING.lg,
+  },
   entriesContainer: {
     padding: SPACING.lg,
     paddingTop: 0,
@@ -217,13 +283,18 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.lg,
     fontWeight: '600',
     color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+  },
+  entriesSubtitle: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
     marginBottom: SPACING.md,
   },
   entryCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    padding: SPACING.lg,
+    padding: SPACING.md,
     borderRadius: BORDER_RADIUS.lg,
     marginBottom: SPACING.sm,
     ...SHADOWS.sm,
@@ -231,15 +302,29 @@ const styles = StyleSheet.create({
   entryCardPressed: {
     opacity: 0.9,
   },
-  moodEmoji: {
-    fontSize: FONT_SIZES.xl,
+  moodIndicator: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: SPACING.md,
   },
-  entryTitle: {
+  moodEmoji: {
+    fontSize: FONT_SIZES.lg,
+  },
+  entryContent: {
     flex: 1,
+  },
+  entryTitle: {
     fontSize: FONT_SIZES.md,
-    fontWeight: '500',
+    fontWeight: '600',
     color: COLORS.textPrimary,
+    marginBottom: SPACING.xs,
+  },
+  entryPreview: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
   },
   emptyState: {
     alignItems: 'center',
