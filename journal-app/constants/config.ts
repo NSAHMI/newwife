@@ -62,6 +62,11 @@ export const CONFIG = {
   FIRESTORE_ENTRIES_COLLECTION: 'entries',
 
   /**
+   * Default re-lock timeout in milliseconds
+   */
+  DEFAULT_RE_LOCK_TIMEOUT: 30000,
+
+  /**
    * SecureStore keys
    */
   SECURE_STORE_KEYS: {
@@ -69,6 +74,7 @@ export const CONFIG = {
     DRAFT_ENTRY: 'draft_entry',
     RE_LOCK_TIMEOUT: 're_lock_timeout',
     LAST_ACTIVE: 'last_active_timestamp',
+    SHOW_MOOD_IN_LIST: 'show_mood_in_list',
   },
 
   /**
@@ -86,3 +92,8 @@ export const CONFIG = {
  * Type for the CONFIG object
  */
 export type AppConfig = typeof CONFIG;
+
+/**
+ * Shorthand for storage keys
+ */
+export const STORAGE_KEYS = CONFIG.SECURE_STORE_KEYS;
