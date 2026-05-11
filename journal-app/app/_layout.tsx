@@ -10,6 +10,8 @@ import { View, StyleSheet } from 'react-native';
 import { COLORS } from '../constants/theme';
 import { AuthProvider } from '../context/AuthContext';
 import { JournalProvider } from '../context/JournalContext';
+import { ErrorBoundary } from '../components/ui/ErrorBoundary';
+import { NetworkStatus } from '../components/ui/NetworkStatus';
 import { isFirebaseConfigured, getFirebaseStatus } from '../services/firebase';
 import { isSupabaseConfigured, getSupabaseStatus } from '../services/supabase';
 
@@ -37,34 +39,37 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <AuthProvider>
-      <JournalProvider>
-        <View style={styles.container}>
-          <StatusBar style="dark" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: COLORS.background },
-              animation: 'slide_from_right',
-            }}
-          >
-            <Stack.Screen
-              name="(auth)"
-              options={{
+    <ErrorBoundary>
+      <AuthProvider>
+        <JournalProvider>
+          <View style={styles.container}>
+            <StatusBar style="dark" />
+            <NetworkStatus />
+            <Stack
+              screenOptions={{
                 headerShown: false,
-                animation: 'fade',
+                contentStyle: { backgroundColor: COLORS.background },
+                animation: 'slide_from_right',
               }}
-            />
-            <Stack.Screen
-              name="(journal)"
-              options={{
-                headerShown: false,
-              }}
-            />
-          </Stack>
-        </View>
-      </JournalProvider>
-    </AuthProvider>
+            >
+              <Stack.Screen
+                name="(auth)"
+                options={{
+                  headerShown: false,
+                  animation: 'fade',
+                }}
+              />
+              <Stack.Screen
+                name="(journal)"
+                options={{
+                  headerShown: false,
+                }}
+              />
+            </Stack>
+          </View>
+        </JournalProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
