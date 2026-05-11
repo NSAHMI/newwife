@@ -4,7 +4,7 @@
  * Uses SectionList for efficient rendering with real-time Firestore data
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,12 +14,14 @@ import {
   SafeAreaView,
   RefreshControl,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS } from '../../constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS, MOOD_CONFIG } from '../../constants/theme';
 import { useJournal } from '../../context/JournalContext';
-import { Entry, EntrySection } from '../../types/entry';
+import { Entry, EntrySection, Mood } from '../../types/entry';
 import { EntryCard } from '../../components/entry/EntryCard';
 import { EmptyState } from '../../components/ui/EmptyState';
 
@@ -27,8 +29,51 @@ import { EmptyState } from '../../components/ui/EmptyState';
  * Home screen component
  */
 export default function HomeScreen() {
-  const { sections, isLoading, error, removeEntry } = useJournal();
+  const { entries, sections, isLoading, error, removeEntry } = useJournal();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  /**
+   * Calculate mood distribution for stats
+   */
+  const moodStats = useMemo(() => {
+    const stats: Record<Mood, number> = {
+      happy: 0,
+      calm: 0,
+      sad: 0,
+      angry: 0,
+      anxious: 0,
+      grateful: 0,
+    };
+    entries.forEach((entry) => {
+      stats[entry.mood] = (stats[entry.mood] || 0) + 1;
+    });
+    return stats;
+  }, [entries]);
+
+  /**
+   * Get the most common mood
+   */
+  const dominantMood = useMemo(() => {
+    let maxCount = 0;
+    let dominant: Mood = 'calm';
+    (Object.keys(moodStats) as Mood[]).forEach((mood) => {
+      if (moodStats[mood] > maxCount) {
+        maxCount = moodStats[mood];
+        dominant = mood;
+      }
+    });
+    return maxCount > 0 ? dominant : null;
+  }, [moodStats]);
+
+  /**
+   * Get greeting based on time of day
+   */
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }, []);
 
   /**
    * Navigate to new entry screen
@@ -90,6 +135,53 @@ export default function HomeScreen() {
   );
 
   /**
+   * Render header component with stats
+   */
+  const renderHeader = useCallback(() => {
+    if (entries.length === 0) return null;
+
+    return (
+      <View style={styles.headerContainer}>
+        {/* Welcome Card */}
+        <LinearGradient
+          colors={[COLORS.primary, COLORS.gradientEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.welcomeCard}
+        >
+          <View style={styles.welcomeContent}>
+            <Text style={styles.welcomeGreeting}>{greeting}</Text>
+            <Text style={styles.welcomeSubtitle}>
+              You have {entries.length} {entries.length === 1 ? 'entry' : 'entries'} in your journal
+            </Text>
+          </View>
+          {dominantMood && (
+            <View style={styles.moodBadge}>
+              <Text style={styles.moodEmoji}>{MOOD_CONFIG[dominantMood].emoji}</Text>
+              <Text style={styles.moodLabel}>Mostly {MOOD_CONFIG[dominantMood].label.toLowerCase()}</Text>
+            </View>
+          )}
+        </LinearGradient>
+
+        {/* Quick Stats */}
+        <View style={styles.statsRow}>
+          {(Object.keys(moodStats) as Mood[])
+            .filter((mood) => moodStats[mood] > 0)
+            .slice(0, 4)
+            .map((mood) => (
+              <View key={mood} style={styles.statItem}>
+                <View style={[styles.statIcon, { backgroundColor: `${MOOD_CONFIG[mood].color}20` }]}>
+                  <Text style={styles.statEmoji}>{MOOD_CONFIG[mood].emoji}</Text>
+                </View>
+                <Text style={styles.statCount}>{moodStats[mood]}</Text>
+              </View>
+            ))}
+        </View>
+      </View>
+    );
+  }, [entries.length, dominantMood, moodStats, greeting]);
+
+  /**
    * Render empty state when no entries exist
    */
   const renderEmpty = useCallback(() => {
@@ -118,19 +210,6 @@ export default function HomeScreen() {
    */
   const keyExtractor = useCallback((item: Entry) => item.id, []);
 
-  /**
-   * Get item layout for performance optimization
-   * Approximate item height for better scrolling performance
-   */
-  const getItemLayout = useCallback(
-    (_data: EntrySection[] | null, index: number) => ({
-      length: 120, // Approximate height of EntryCard
-      offset: 120 * index,
-      index,
-    }),
-    []
-  );
-
   // Show error state if there's an error
   if (error && !isLoading) {
     return (
@@ -154,6 +233,7 @@ export default function HomeScreen() {
         keyExtractor={keyExtractor}
         renderItem={renderEntry}
         renderSectionHeader={renderSectionHeader}
+        ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={[
           styles.listContent,
@@ -197,6 +277,74 @@ const styles = StyleSheet.create({
   },
   emptyListContent: {
     flexGrow: 1,
+  },
+  headerContainer: {
+    marginBottom: SPACING.md,
+  },
+  welcomeCard: {
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xl,
+    marginBottom: SPACING.lg,
+    ...SHADOWS.md,
+  },
+  welcomeContent: {
+    marginBottom: SPACING.md,
+  },
+  welcomeGreeting: {
+    fontSize: FONT_SIZES.xxl,
+    fontWeight: '700',
+    color: COLORS.surface,
+    marginBottom: SPACING.xs,
+  },
+  welcomeSubtitle: {
+    fontSize: FONT_SIZES.md,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  moodBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignSelf: 'flex-start',
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: BORDER_RADIUS.full,
+    gap: SPACING.sm,
+  },
+  moodEmoji: {
+    fontSize: FONT_SIZES.lg,
+  },
+  moodLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.surface,
+    fontWeight: '500',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+  },
+  statItem: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    alignItems: 'center',
+    ...SHADOWS.sm,
+  },
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  statEmoji: {
+    fontSize: FONT_SIZES.md,
+  },
+  statCount: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
   },
   sectionHeader: {
     flexDirection: 'row',

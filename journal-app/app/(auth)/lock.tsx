@@ -4,22 +4,37 @@
  * Users must authenticate to access the journal
  */
 
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, SafeAreaView, ActivityIndicator } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  SafeAreaView,
+  ActivityIndicator,
+  Animated,
+  Easing,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { COLORS, FONT_SIZES, SPACING, BORDER_RADIUS } from '../../constants/theme';
+import { COLORS, FONT_SIZES, SPACING, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 import { useBiometric } from '../../hooks/useBiometric';
 import { useAuth } from '../../context/AuthContext';
 
 /**
  * Lock screen component
- * Displays the biometric unlock interface
+ * Displays the biometric unlock interface with smooth animations
  */
 export default function LockScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showNotEnrolled, setShowNotEnrolled] = useState(false);
+
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const lockAnim = useRef(new Animated.Value(0)).current;
 
   const {
     hasBiometrics,
@@ -39,13 +54,61 @@ export default function LockScreen() {
   } = useAuth();
 
   /**
+   * Entrance animation on mount
+   */
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+    ]).start();
+
+    // Start pulse animation for lock icon
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.1,
+          duration: 1500,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ])
+    );
+    pulseAnimation.start();
+
+    return () => pulseAnimation.stop();
+  }, [fadeAnim, slideAnim, pulseAnim]);
+
+  /**
    * Redirect to journal if already authenticated
    */
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace('/(journal)/');
+      // Animate out before navigating
+      Animated.timing(lockAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        router.replace('/(journal)/');
+      });
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, lockAnim]);
 
   /**
    * Show biometrics not enrolled warning
@@ -112,7 +175,23 @@ export default function LockScreen() {
       style={styles.gradient}
     >
       <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              opacity: fadeAnim,
+              transform: [
+                { translateY: slideAnim },
+                {
+                  scale: lockAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 0.9],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
           {/* App Logo/Icon Area */}
           <View style={styles.logoContainer}>
             <View style={styles.iconCircle}>
@@ -122,28 +201,48 @@ export default function LockScreen() {
             <Text style={styles.tagline}>Your private thoughts, secured</Text>
           </View>
 
-          {/* Lock Icon */}
-          <View style={styles.lockIconContainer}>
-            <Ionicons name="lock-closed" size={64} color={COLORS.surface} />
+          {/* Lock Icon with Pulse Animation */}
+          <Animated.View
+            style={[
+              styles.lockIconContainer,
+              { transform: [{ scale: pulseAnim }] },
+            ]}
+          >
+            <View style={styles.lockCircle}>
+              <Ionicons name="lock-closed" size={48} color={COLORS.surface} />
+            </View>
+          </Animated.View>
+
+          {/* Status Messages */}
+          <View style={styles.messageContainer}>
+            {/* Error Message */}
+            {(error || authError) && (
+              <Animated.View
+                style={[
+                  styles.errorContainer,
+                  { opacity: fadeAnim },
+                ]}
+              >
+                <Ionicons name="alert-circle" size={20} color={COLORS.error} />
+                <Text style={styles.errorText}>{error || authError}</Text>
+              </Animated.View>
+            )}
+
+            {/* Not Enrolled Warning */}
+            {showNotEnrolled && !error && (
+              <Animated.View
+                style={[
+                  styles.warningContainer,
+                  { opacity: fadeAnim },
+                ]}
+              >
+                <Ionicons name="warning" size={20} color={COLORS.warning} />
+                <Text style={styles.warningText}>
+                  Set up Face ID or Fingerprint in your device settings to use Journal Lock.
+                </Text>
+              </Animated.View>
+            )}
           </View>
-
-          {/* Error Message */}
-          {(error || authError) && (
-            <View style={styles.errorContainer}>
-              <Ionicons name="alert-circle" size={20} color={COLORS.error} />
-              <Text style={styles.errorText}>{error || authError}</Text>
-            </View>
-          )}
-
-          {/* Not Enrolled Warning */}
-          {showNotEnrolled && !error && (
-            <View style={styles.warningContainer}>
-              <Ionicons name="warning" size={20} color={COLORS.warning} />
-              <Text style={styles.warningText}>
-                Set up Face ID or Fingerprint in your device settings to use Journal Lock.
-              </Text>
-            </View>
-          )}
 
           {/* Unlock Button */}
           <View style={styles.buttonContainer}>
@@ -160,7 +259,9 @@ export default function LockScreen() {
                 <ActivityIndicator color={COLORS.primary} size="small" />
               ) : (
                 <>
-                  <Ionicons name={getBiometricIcon()} size={24} color={COLORS.primary} />
+                  <View style={styles.buttonIconContainer}>
+                    <Ionicons name={getBiometricIcon()} size={24} color={COLORS.surface} />
+                  </View>
                   <Text style={styles.unlockButtonText}>{getButtonText()}</Text>
                 </>
               )}
@@ -168,14 +269,17 @@ export default function LockScreen() {
 
             <Text style={styles.fallbackText}>
               {hasBiometrics && isEnrolled
-                ? `Use ${getPrimaryBiometricType()} or Device Passcode`
+                ? `Tap to use ${getPrimaryBiometricType()}`
                 : 'Biometric authentication required'}
             </Text>
           </View>
-        </View>
+        </Animated.View>
 
-        {/* Version Info */}
-        <Text style={styles.versionText}>Version 1.0.0</Text>
+        {/* Footer */}
+        <View style={styles.footer}>
+          <View style={styles.footerDivider} />
+          <Text style={styles.versionText}>Version 1.0.0</Text>
+        </View>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -197,7 +301,7 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: SPACING.xxxxxl,
+    marginTop: SPACING.xxxl,
   },
   iconCircle: {
     width: 100,
@@ -207,19 +311,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.lg,
+    ...SHADOWS.lg,
   },
   appName: {
     fontSize: FONT_SIZES.xxxl,
     fontWeight: '700',
     color: COLORS.surface,
     marginBottom: SPACING.sm,
+    letterSpacing: 1,
   },
   tagline: {
     fontSize: FONT_SIZES.md,
     color: 'rgba(255, 255, 255, 0.7)',
   },
   lockIconContainer: {
-    opacity: 0.3,
+    marginVertical: SPACING.xl,
+  },
+  lockCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  messageContainer: {
+    width: '100%',
+    minHeight: 80,
+    justifyContent: 'center',
   },
   errorContainer: {
     flexDirection: 'row',
@@ -229,7 +350,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     borderRadius: BORDER_RADIUS.lg,
     gap: SPACING.sm,
-    marginBottom: SPACING.lg,
   },
   errorText: {
     flex: 1,
@@ -244,7 +364,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     borderRadius: BORDER_RADIUS.lg,
     gap: SPACING.sm,
-    marginBottom: SPACING.lg,
     maxWidth: '100%',
   },
   warningText: {
@@ -256,19 +375,20 @@ const styles = StyleSheet.create({
   buttonContainer: {
     width: '100%',
     alignItems: 'center',
-    marginBottom: SPACING.xxxl,
+    marginBottom: SPACING.lg,
   },
   unlockButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.accent,
     paddingVertical: SPACING.lg,
     paddingHorizontal: SPACING.xxxl,
     borderRadius: BORDER_RADIUS.xl,
     width: '100%',
     gap: SPACING.md,
-    minHeight: 56,
+    minHeight: 60,
+    ...SHADOWS.md,
   },
   unlockButtonPressed: {
     opacity: 0.9,
@@ -277,10 +397,18 @@ const styles = StyleSheet.create({
   unlockButtonDisabled: {
     opacity: 0.7,
   },
+  buttonIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   unlockButtonText: {
     fontSize: FONT_SIZES.lg,
     fontWeight: '600',
-    color: COLORS.primary,
+    color: COLORS.surface,
   },
   fallbackText: {
     marginTop: SPACING.lg,
@@ -288,10 +416,20 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.6)',
     textAlign: 'center',
   },
+  footer: {
+    alignItems: 'center',
+    paddingBottom: SPACING.lg,
+  },
+  footerDivider: {
+    width: 40,
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 2,
+    marginBottom: SPACING.md,
+  },
   versionText: {
     fontSize: FONT_SIZES.xs,
     color: 'rgba(255, 255, 255, 0.4)',
     textAlign: 'center',
-    paddingBottom: SPACING.lg,
   },
 });
