@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "Journal",
+    "slug": "journal-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "journal-app",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F9F7F4"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.journal.app",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to securely access your journal",
+        "NSPhotoLibraryUsageDescription": "Allow access to your photo library to attach images to journal entries",
+        "NSCameraUsageDescription": "Allow camera access to take photos for your journal entries"
+      }
+    },
+    "android": {
+      "package": "com.journal.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F9F7F4"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "READ_EXTERNAL_STORAGE",
+        "CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-router",
+        {
+          "root": "./app"
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Use Face ID to securely access your journal"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow access to your photo library to attach images to journal entries",
+          "cameraPermission": "Allow camera access to take photos for your journal entries"
+        }
+      ]
+    ]
+  }
+}
