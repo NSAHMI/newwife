@@ -3,73 +3,77 @@
  * View a full journal entry with all details
  */
 
-import { View, Text, StyleSheet, ScrollView, Pressable, SafeAreaView, Alert } from 'react-native';
+import { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  SafeAreaView,
+  Alert,
+  Image,
+  ActivityIndicator,
+} from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS, MOOD_CONFIG } from '../../../constants/theme';
-import { Mood } from '../../../types/entry';
-
-/**
- * Placeholder entry data for Phase 1
- * Will be replaced with Firestore data in Phase 6
- */
-const PLACEHOLDER_ENTRIES: Record<string, {
-  id: string;
-  title: string;
-  body: string;
-  mood: Mood;
-  dateKey: string;
-  wordCount: number;
-  tags: string[];
-  createdAt: string;
-}> = {
-  '1': {
-    id: '1',
-    title: 'A Beautiful Morning',
-    body: `Today started with the most incredible sunrise. The colors painted across the sky reminded me of why I love early mornings.
-
-I woke up before my alarm, which is rare for me. Instead of reaching for my phone, I decided to sit by the window and just watch the world wake up. The sky transformed from deep purple to orange to pale blue in what felt like minutes.
-
-There's something magical about those quiet moments before the day truly begins. No notifications, no deadlines, just the simple beauty of nature doing its thing.
-
-I want to make this a habit - starting my day with intention rather than reaction. Maybe I'll set my alarm 30 minutes earlier and use that time for reflection or journaling.
-
-Today felt different because of how it started. I carried that sense of peace with me throughout the morning. Even when things got busy at work, I could recall that peaceful image and feel grounded again.`,
-    mood: 'happy',
-    dateKey: '2026-05-11',
-    wordCount: 150,
-    tags: ['morning', 'gratitude', 'mindfulness'],
-    createdAt: 'May 11, 2026 at 6:30 AM',
-  },
-  '2': {
-    id: '2',
-    title: 'Reflections on Growth',
-    body: `Looking back at the past few months, I can see how much I have changed. It's amazing how small steps lead to big transformations.
-
-When I started this journey, I had no idea where it would take me. The goals I set seemed ambitious, maybe even impossible. But here I am, having accomplished more than I thought I could.
-
-The key was consistency. Not perfection, not intensity - just showing up day after day, even when I didn't feel like it. Especially when I didn't feel like it.
-
-I'm grateful for the challenges because they taught me resilience. I'm grateful for the setbacks because they taught me humility. And I'm grateful for the small wins because they taught me to celebrate progress, not just results.
-
-What's next? I'm not entirely sure, but I know I'm ready for it.`,
-    mood: 'grateful',
-    dateKey: '2026-05-10',
-    wordCount: 200,
-    tags: ['reflection', 'growth', 'gratitude'],
-    createdAt: 'May 10, 2026 at 9:15 PM',
-  },
-};
+import { Entry } from '../../../types/entry';
+import { useJournal } from '../../../context/JournalContext';
+import { formatDateTime, getReadTime, countWords } from '../../../utils/dateUtils';
+import { LoadingOverlay } from '../../../components/ui/LoadingOverlay';
 
 /**
  * Entry detail screen component
  */
 export default function EntryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { getEntry, removeEntry, isLoading: contextLoading } = useJournal();
 
-  // Get entry data (placeholder for now)
-  const entry = id ? PLACEHOLDER_ENTRIES[id] : null;
+  const [entry, setEntry] = useState<Entry | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
 
+  /**
+   * Load entry data
+   */
+  useEffect(() => {
+    const loadEntry = async () => {
+      if (!id) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const fetchedEntry = await getEntry(id);
+        setEntry(fetchedEntry);
+      } catch (error) {
+        console.error('Error loading entry:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadEntry();
+  }, [id, getEntry]);
+
+  /**
+   * Show loading state
+   */
+  if (isLoading || contextLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.accent} />
+          <Text style={styles.loadingText}>Loading entry...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  /**
+   * Show not found state
+   */
   if (!entry) {
     return (
       <SafeAreaView style={styles.container}>
@@ -88,7 +92,9 @@ export default function EntryDetailScreen() {
   }
 
   const moodConfig = MOOD_CONFIG[entry.mood];
-  const readTime = Math.max(1, Math.ceil(entry.wordCount / 200)); // Average reading speed
+  const wordCount = entry.wordCount || countWords(entry.body);
+  const readTime = getReadTime(wordCount);
+  const formattedDate = formatDateTime(entry.createdAt);
 
   /**
    * Handle edit action
@@ -109,11 +115,16 @@ export default function EntryDetailScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            // TODO: Implement delete in Phase 6
-            Alert.alert('Deleted', 'Entry has been deleted.', [
-              { text: 'OK', onPress: () => router.back() },
-            ]);
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              await removeEntry(entry.id);
+              router.back();
+            } catch (error) {
+              console.error('Error deleting entry:', error);
+              Alert.alert('Error', 'Failed to delete entry. Please try again.');
+              setIsDeleting(false);
+            }
           },
         },
       ]
@@ -144,7 +155,7 @@ export default function EntryDetailScreen() {
       >
         {/* Date and Mood */}
         <View style={styles.metaContainer}>
-          <Text style={styles.dateText}>{entry.createdAt}</Text>
+          <Text style={styles.dateText}>{formattedDate}</Text>
           <View style={[styles.moodChip, { backgroundColor: `${moodConfig.color}20` }]}>
             <Text style={styles.moodEmoji}>{moodConfig.emoji}</Text>
             <Text style={[styles.moodLabel, { color: moodConfig.color }]}>
@@ -156,11 +167,22 @@ export default function EntryDetailScreen() {
         {/* Title */}
         <Text style={styles.title}>{entry.title}</Text>
 
+        {/* Image (if present) */}
+        {entry.imageUrl && (
+          <View style={styles.imageContainer}>
+            <Image
+              source={{ uri: entry.imageUrl }}
+              style={styles.image}
+              resizeMode="cover"
+            />
+          </View>
+        )}
+
         {/* Body */}
         <Text style={styles.body}>{entry.body}</Text>
 
         {/* Tags */}
-        {entry.tags.length > 0 && (
+        {entry.tags && entry.tags.length > 0 && (
           <View style={styles.tagsContainer}>
             {entry.tags.map((tag) => (
               <View key={tag} style={styles.tag}>
@@ -174,7 +196,7 @@ export default function EntryDetailScreen() {
         <View style={styles.statsContainer}>
           <View style={styles.stat}>
             <Ionicons name="text-outline" size={16} color={COLORS.textSecondary} />
-            <Text style={styles.statText}>{entry.wordCount} words</Text>
+            <Text style={styles.statText}>{wordCount} words</Text>
           </View>
           <View style={styles.stat}>
             <Ionicons name="time-outline" size={16} color={COLORS.textSecondary} />
@@ -182,6 +204,9 @@ export default function EntryDetailScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Loading overlay for delete operation */}
+      <LoadingOverlay visible={isDeleting} message="Deleting entry..." />
     </SafeAreaView>
   );
 }
@@ -224,6 +249,7 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
+    flex: 1,
   },
   moodChip: {
     flexDirection: 'row',
@@ -246,6 +272,16 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: SPACING.xl,
     lineHeight: 34,
+  },
+  imageContainer: {
+    marginBottom: SPACING.xl,
+    borderRadius: BORDER_RADIUS.lg,
+    overflow: 'hidden',
+    ...SHADOWS.md,
+  },
+  image: {
+    width: '100%',
+    height: 250,
   },
   body: {
     fontSize: FONT_SIZES.md,
@@ -286,6 +322,17 @@ const styles = StyleSheet.create({
   statText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xxl,
+  },
+  loadingText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.lg,
   },
   notFound: {
     flex: 1,

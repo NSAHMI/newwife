@@ -3,7 +3,7 @@
  * Edit an existing journal entry
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,104 +15,102 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS, MOOD_CONFIG } from '../../../../constants/theme';
+import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS } from '../../../../constants/theme';
 import { CONFIG } from '../../../../constants/config';
-import { Mood, MOODS } from '../../../../types/entry';
-
-/**
- * Placeholder entry data for Phase 1
- * Will be replaced with Firestore data in Phase 6
- */
-const PLACEHOLDER_ENTRIES: Record<string, {
-  id: string;
-  title: string;
-  body: string;
-  mood: Mood;
-  tags: string[];
-}> = {
-  '1': {
-    id: '1',
-    title: 'A Beautiful Morning',
-    body: `Today started with the most incredible sunrise. The colors painted across the sky reminded me of why I love early mornings.
-
-I woke up before my alarm, which is rare for me. Instead of reaching for my phone, I decided to sit by the window and just watch the world wake up. The sky transformed from deep purple to orange to pale blue in what felt like minutes.
-
-There's something magical about those quiet moments before the day truly begins. No notifications, no deadlines, just the simple beauty of nature doing its thing.`,
-    mood: 'happy',
-    tags: ['morning', 'gratitude', 'mindfulness'],
-  },
-  '2': {
-    id: '2',
-    title: 'Reflections on Growth',
-    body: `Looking back at the past few months, I can see how much I have changed. It's amazing how small steps lead to big transformations.
-
-When I started this journey, I had no idea where it would take me. The goals I set seemed ambitious, maybe even impossible. But here I am, having accomplished more than I thought I could.`,
-    mood: 'grateful',
-    tags: ['reflection', 'growth', 'gratitude'],
-  },
-};
+import { Mood, Entry } from '../../../../types/entry';
+import { useJournal } from '../../../../context/JournalContext';
+import { useImageUpload } from '../../../../hooks/useImageUpload';
+import { MoodSelector } from '../../../../components/entry/MoodSelector';
+import { ImageAttachment } from '../../../../components/entry/ImageAttachment';
+import { LoadingOverlay } from '../../../../components/ui/LoadingOverlay';
+import { countWords } from '../../../../utils/dateUtils';
 
 /**
  * Edit entry screen component
  */
 export default function EditEntryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const originalEntry = id ? PLACEHOLDER_ENTRIES[id] : null;
+  const { getEntry, editEntry, isLoading: contextLoading } = useJournal();
+  const {
+    imageState,
+    isUploading,
+    uploadProgress,
+    pickImage,
+    takePhoto,
+    clearImage,
+    upload,
+    setExistingImage,
+  } = useImageUpload();
 
+  const [originalEntry, setOriginalEntry] = useState<Entry | null>(null);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [selectedMood, setSelectedMood] = useState<Mood>('calm');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Load original entry data
+  /**
+   * Load original entry data
+   */
+  useEffect(() => {
+    const loadEntry = async () => {
+      if (!id) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const fetchedEntry = await getEntry(id);
+        if (fetchedEntry) {
+          setOriginalEntry(fetchedEntry);
+          setTitle(fetchedEntry.title);
+          setBody(fetchedEntry.body);
+          setSelectedMood(fetchedEntry.mood);
+          setTags(fetchedEntry.tags || []);
+
+          // Set existing image if present
+          if (fetchedEntry.imageUrl || fetchedEntry.imagePath) {
+            setExistingImage(fetchedEntry.imageUrl, fetchedEntry.imagePath);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading entry:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadEntry();
+  }, [id, getEntry, setExistingImage]);
+
+  /**
+   * Track changes
+   */
   useEffect(() => {
     if (originalEntry) {
-      setTitle(originalEntry.title);
-      setBody(originalEntry.body);
-      setSelectedMood(originalEntry.mood);
-      setTags(originalEntry.tags);
-    }
-  }, [id]);
+      const titleChanged = title !== originalEntry.title;
+      const bodyChanged = body !== originalEntry.body;
+      const moodChanged = selectedMood !== originalEntry.mood;
+      const tagsChanged = JSON.stringify(tags) !== JSON.stringify(originalEntry.tags || []);
+      const imageChanged =
+        imageState.localUri !== null ||
+        (imageState.remoteUrl !== originalEntry.imageUrl);
 
-  // Track changes
-  useEffect(() => {
-    if (originalEntry) {
-      const changed =
-        title !== originalEntry.title ||
-        body !== originalEntry.body ||
-        selectedMood !== originalEntry.mood ||
-        JSON.stringify(tags) !== JSON.stringify(originalEntry.tags);
-      setHasChanges(changed);
+      setHasChanges(titleChanged || bodyChanged || moodChanged || tagsChanged || imageChanged);
     }
-  }, [title, body, selectedMood, tags, originalEntry]);
-
-  if (!originalEntry) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.notFound}>
-          <Ionicons name="document-text-outline" size={64} color={COLORS.border} />
-          <Text style={styles.notFoundText}>Entry not found</Text>
-          <Pressable
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  }, [title, body, selectedMood, tags, imageState, originalEntry]);
 
   /**
    * Calculate word count from body text
    */
-  const wordCount = body.trim() ? body.trim().split(/\s+/).length : 0;
+  const wordCount = countWords(body);
 
   /**
    * Handle adding a new tag
@@ -155,17 +153,50 @@ export default function EditEntryScreen() {
    * Handle saving the entry
    */
   const handleSave = async () => {
-    if (!validateEntry()) return;
+    if (!validateEntry() || !originalEntry) return;
 
     setIsSaving(true);
     try {
-      // TODO: Implement actual save in Phase 6
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Prepare update data
+      const updateData: {
+        title: string;
+        body: string;
+        mood: Mood;
+        tags: string[];
+        imageUrl?: string | null;
+        imagePath?: string | null;
+      } = {
+        title: title.trim(),
+        body: body.trim(),
+        mood: selectedMood,
+        tags,
+      };
 
-      Alert.alert('Entry Updated', 'Your changes have been saved.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      // Handle image upload if there's a new local image
+      if (imageState.localUri) {
+        try {
+          const uploadResult = await upload(originalEntry.userId, originalEntry.id);
+          if (uploadResult) {
+            updateData.imageUrl = uploadResult.publicUrl;
+            updateData.imagePath = uploadResult.storagePath;
+          }
+        } catch (uploadError) {
+          console.error('Failed to upload image:', uploadError);
+          Alert.alert(
+            'Image Upload Failed',
+            'Your entry will be saved without the new image. You can try adding the image again later.'
+          );
+        }
+      } else if (!imageState.hasImage && originalEntry.imageUrl) {
+        // Image was removed
+        updateData.imageUrl = null;
+        updateData.imagePath = null;
+      }
+
+      await editEntry(originalEntry.id, updateData);
+      router.back();
     } catch (error) {
+      console.error('Failed to save entry:', error);
       Alert.alert('Error', 'Failed to save changes. Please try again.');
     } finally {
       setIsSaving(false);
@@ -175,20 +206,84 @@ export default function EditEntryScreen() {
   /**
    * Handle canceling the edit
    */
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     if (hasChanges) {
       Alert.alert(
         'Discard Changes?',
         'You have unsaved changes. Are you sure you want to discard them?',
         [
           { text: 'Keep Editing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: () => router.back() },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: async () => {
+              // Clear any newly selected image
+              if (imageState.localUri) {
+                await clearImage();
+              }
+              router.back();
+            },
+          },
         ]
       );
     } else {
       router.back();
     }
+  }, [hasChanges, imageState.localUri, clearImage]);
+
+  /**
+   * Handle removing the image
+   */
+  const handleRemoveImage = async () => {
+    Alert.alert(
+      'Remove Photo?',
+      'Are you sure you want to remove this photo?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await clearImage();
+          },
+        },
+      ]
+    );
   };
+
+  /**
+   * Show loading state
+   */
+  if (isLoading || contextLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.accent} />
+          <Text style={styles.loadingText}>Loading entry...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  /**
+   * Show not found state
+   */
+  if (!originalEntry) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.notFound}>
+          <Ionicons name="document-text-outline" size={64} color={COLORS.border} />
+          <Text style={styles.notFoundText}>Entry not found</Text>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -212,39 +307,10 @@ export default function EditEntryScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* Mood Selector */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>How are you feeling?</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.moodContainer}
-            >
-              {MOODS.map((mood) => {
-                const config = MOOD_CONFIG[mood];
-                const isSelected = selectedMood === mood;
-                return (
-                  <Pressable
-                    key={mood}
-                    style={[
-                      styles.moodPill,
-                      isSelected && { backgroundColor: config.color },
-                    ]}
-                    onPress={() => setSelectedMood(mood)}
-                  >
-                    <Text style={styles.moodEmoji}>{config.emoji}</Text>
-                    <Text
-                      style={[
-                        styles.moodLabel,
-                        isSelected && styles.moodLabelSelected,
-                      ]}
-                    >
-                      {config.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
+          <MoodSelector
+            selectedMood={selectedMood}
+            onMoodSelect={setSelectedMood}
+          />
 
           {/* Title Input */}
           <View style={styles.section}>
@@ -313,6 +379,17 @@ export default function EditEntryScreen() {
               </View>
             )}
           </View>
+
+          {/* Image Attachment */}
+          <ImageAttachment
+            localUri={imageState.localUri}
+            remoteUrl={imageState.remoteUrl}
+            isUploading={isUploading}
+            uploadProgress={uploadProgress}
+            onPickImage={pickImage}
+            onTakePhoto={takePhoto}
+            onRemoveImage={handleRemoveImage}
+          />
         </ScrollView>
 
         {/* Bottom Actions */}
@@ -320,6 +397,7 @@ export default function EditEntryScreen() {
           <Pressable
             style={({ pressed }) => [styles.cancelButton, pressed && styles.buttonPressed]}
             onPress={handleCancel}
+            disabled={isSaving}
           >
             <Text style={styles.cancelButtonText}>Cancel</Text>
           </Pressable>
@@ -338,6 +416,9 @@ export default function EditEntryScreen() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay visible={isSaving} message="Saving changes..." />
     </SafeAreaView>
   );
 }
@@ -388,32 +469,6 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-  },
-  moodContainer: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  moodPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderRadius: BORDER_RADIUS.full,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: SPACING.xs,
-  },
-  moodEmoji: {
-    fontSize: FONT_SIZES.lg,
-  },
-  moodLabel: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '500',
-    color: COLORS.textPrimary,
-  },
-  moodLabelSelected: {
-    color: COLORS.surface,
   },
   titleInput: {
     fontSize: FONT_SIZES.xxl,
@@ -526,6 +581,17 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.9,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xxl,
+  },
+  loadingText: {
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.lg,
   },
   notFound: {
     flex: 1,
