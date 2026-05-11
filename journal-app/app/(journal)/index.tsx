@@ -1,59 +1,35 @@
 /**
  * Home Screen
  * Main journal feed showing all entries grouped by month
- * Uses SectionList for efficient rendering
+ * Uses SectionList for efficient rendering with real-time Firestore data
  */
 
-import { View, Text, StyleSheet, SectionList, Pressable, SafeAreaView } from 'react-native';
+import { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SectionList,
+  Pressable,
+  SafeAreaView,
+  RefreshControl,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS } from '../../constants/theme';
-
-/**
- * Placeholder entry data for Phase 1
- * Will be replaced with Firestore data in Phase 3
- */
-const PLACEHOLDER_SECTIONS = [
-  {
-    title: 'May 2026',
-    monthKey: '2026-05',
-    data: [
-      {
-        id: '1',
-        title: 'A Beautiful Morning',
-        body: 'Today started with the most incredible sunrise. The colors painted across the sky reminded me of why I love early mornings...',
-        mood: 'happy' as const,
-        dateKey: '2026-05-11',
-        wordCount: 150,
-      },
-      {
-        id: '2',
-        title: 'Reflections on Growth',
-        body: 'Looking back at the past few months, I can see how much I have changed. It is amazing how small steps lead to big transformations...',
-        mood: 'grateful' as const,
-        dateKey: '2026-05-10',
-        wordCount: 200,
-      },
-    ],
-  },
-];
-
-/**
- * Mood emoji mapping
- */
-const MOOD_EMOJI: Record<string, string> = {
-  happy: '😊',
-  calm: '😌',
-  sad: '😢',
-  angry: '😠',
-  anxious: '😰',
-  grateful: '🙏',
-};
+import { useJournal } from '../../context/JournalContext';
+import { Entry, EntrySection } from '../../types/entry';
+import { EntryCard } from '../../components/entry/EntryCard';
+import { EmptyState } from '../../components/ui/EmptyState';
 
 /**
  * Home screen component
  */
 export default function HomeScreen() {
+  const { sections, isLoading, error, removeEntry } = useJournal();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   /**
    * Navigate to new entry screen
    */
@@ -62,78 +38,141 @@ export default function HomeScreen() {
   };
 
   /**
-   * Navigate to entry detail
+   * Handle entry deletion
    */
-  const handleEntryPress = (id: string) => {
-    router.push(`/(journal)/entry/${id}`);
-  };
+  const handleDeleteEntry = useCallback(
+    async (entryId: string) => {
+      try {
+        await removeEntry(entryId);
+      } catch (err) {
+        console.error('Failed to delete entry:', err);
+      }
+    },
+    [removeEntry]
+  );
+
+  /**
+   * Handle pull-to-refresh
+   * The JournalContext auto-refreshes via Firestore listener,
+   * but this provides visual feedback to the user
+   */
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    // Simulate a brief refresh delay for UX
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 500);
+  }, []);
 
   /**
    * Render individual entry card
    */
-  const renderEntry = ({ item }: { item: typeof PLACEHOLDER_SECTIONS[0]['data'][0] }) => (
-    <Pressable
-      style={({ pressed }) => [styles.entryCard, pressed && styles.entryCardPressed]}
-      onPress={() => handleEntryPress(item.id)}
-    >
-      <View style={styles.entryMoodStrip} />
-      <View style={styles.entryContent}>
-        <View style={styles.entryHeader}>
-          <Text style={styles.moodEmoji}>{MOOD_EMOJI[item.mood]}</Text>
-          <Text style={styles.entryTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
-        </View>
-        <Text style={styles.entryBody} numberOfLines={2}>
-          {item.body}
-        </Text>
-        <View style={styles.entryFooter}>
-          <Text style={styles.entryDate}>{item.dateKey}</Text>
-          <Text style={styles.entryWordCount}>{item.wordCount} words</Text>
-        </View>
-      </View>
-    </Pressable>
+  const renderEntry = useCallback(
+    ({ item }: { item: Entry }) => (
+      <EntryCard entry={item} onDelete={handleDeleteEntry} />
+    ),
+    [handleDeleteEntry]
   );
 
   /**
    * Render section header (month)
    */
-  const renderSectionHeader = ({ section }: { section: typeof PLACEHOLDER_SECTIONS[0] }) => (
-    <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{section.title}</Text>
-    </View>
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: EntrySection }) => (
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{section.title}</Text>
+        <Text style={styles.sectionCount}>
+          {section.data.length} {section.data.length === 1 ? 'entry' : 'entries'}
+        </Text>
+      </View>
+    ),
+    []
   );
 
   /**
    * Render empty state when no entries exist
    */
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Ionicons name="book-outline" size={80} color={COLORS.border} />
-      <Text style={styles.emptyTitle}>Your journal is empty</Text>
-      <Text style={styles.emptySubtitle}>
-        Start writing your first entry to capture your thoughts and memories.
-      </Text>
-      <Pressable
-        style={({ pressed }) => [styles.emptyButton, pressed && styles.emptyButtonPressed]}
-        onPress={handleNewEntry}
-      >
-        <Text style={styles.emptyButtonText}>Write Today's Entry</Text>
-      </Pressable>
-    </View>
+  const renderEmpty = useCallback(() => {
+    if (isLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.accent} />
+          <Text style={styles.loadingText}>Loading your journal...</Text>
+        </View>
+      );
+    }
+
+    return (
+      <EmptyState
+        icon="book-outline"
+        title="Your journal is empty"
+        subtitle="Start writing your first entry to capture your thoughts and memories."
+        buttonText="Write Today's Entry"
+        onButtonPress={handleNewEntry}
+      />
+    );
+  }, [isLoading, handleNewEntry]);
+
+  /**
+   * Key extractor for SectionList
+   */
+  const keyExtractor = useCallback((item: Entry) => item.id, []);
+
+  /**
+   * Get item layout for performance optimization
+   * Approximate item height for better scrolling performance
+   */
+  const getItemLayout = useCallback(
+    (_data: EntrySection[] | null, index: number) => ({
+      length: 120, // Approximate height of EntryCard
+      offset: 120 * index,
+      index,
+    }),
+    []
   );
+
+  // Show error state if there's an error
+  if (error && !isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Something went wrong"
+          subtitle={error}
+          buttonText="Try Again"
+          onButtonPress={handleRefresh}
+          iconColor={COLORS.error}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <SectionList
-        sections={PLACEHOLDER_SECTIONS}
-        keyExtractor={(item) => item.id}
+        sections={sections}
+        keyExtractor={keyExtractor}
         renderItem={renderEntry}
         renderSectionHeader={renderSectionHeader}
         ListEmptyComponent={renderEmpty}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          sections.length === 0 && styles.emptyListContent,
+        ]}
         stickySectionHeadersEnabled={false}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.accent}
+            colors={[COLORS.accent]}
+          />
+        }
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={true}
       />
 
       {/* Floating Action Button */}
@@ -156,7 +195,13 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     paddingBottom: 100, // Space for FAB
   },
+  emptyListContent: {
+    flexGrow: 1,
+  },
   sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
     paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.sm,
     marginTop: SPACING.lg,
@@ -166,94 +211,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.textPrimary,
   },
-  entryCard: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    marginBottom: SPACING.md,
-    overflow: 'hidden',
-    ...SHADOWS.md,
-  },
-  entryCardPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.99 }],
-  },
-  entryMoodStrip: {
-    width: 4,
-    backgroundColor: COLORS.accent,
-  },
-  entryContent: {
-    flex: 1,
-    padding: SPACING.lg,
-  },
-  entryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-  },
-  moodEmoji: {
-    fontSize: FONT_SIZES.xl,
-    marginRight: SPACING.sm,
-  },
-  entryTitle: {
-    flex: 1,
-    fontSize: FONT_SIZES.lg,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-  },
-  entryBody: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    lineHeight: 22,
-    marginBottom: SPACING.md,
-  },
-  entryFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  entryDate: {
+  sectionCount: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
   },
-  entryWordCount: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  emptyContainer: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: SPACING.xxxl,
-    paddingTop: 100,
+    paddingVertical: SPACING.xxxxxl,
   },
-  emptyTitle: {
-    fontSize: FONT_SIZES.xl,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-    marginTop: SPACING.xxl,
-    marginBottom: SPACING.sm,
-  },
-  emptySubtitle: {
+  loadingText: {
+    marginTop: SPACING.lg,
     fontSize: FONT_SIZES.md,
     color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: SPACING.xxl,
-  },
-  emptyButton: {
-    backgroundColor: COLORS.accent,
-    paddingVertical: SPACING.lg,
-    paddingHorizontal: SPACING.xxl,
-    borderRadius: BORDER_RADIUS.lg,
-  },
-  emptyButtonPressed: {
-    opacity: 0.9,
-  },
-  emptyButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: '600',
-    color: COLORS.surface,
   },
   fab: {
     position: 'absolute',
