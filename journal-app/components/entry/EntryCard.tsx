@@ -1,15 +1,24 @@
 /**
  * EntryCard Component
  * Summary card for displaying journal entries in lists
+ * Features mood indicator, body preview, and image thumbnail
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Alert } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Image,
+  Alert,
+  Animated,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Entry } from '../../types/entry';
 import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS, MOOD_CONFIG } from '../../constants/theme';
-import { formatShortDate, normalizeDate } from '../../utils/dateUtils';
+import { formatShortDate } from '../../utils/dateUtils';
 
 /**
  * EntryCard props
@@ -21,20 +30,74 @@ interface EntryCardProps {
   onDelete?: (entryId: string) => void;
   /** Whether to show delete option on long press */
   showDeleteOption?: boolean;
+  /** Index for staggered animation */
+  index?: number;
 }
 
 /**
  * EntryCard component
  * Displays a summary of a journal entry with mood, title, body preview, and metadata
  */
-export function EntryCard({ entry, onDelete, showDeleteOption = true }: EntryCardProps) {
+export function EntryCard({ entry, onDelete, showDeleteOption = true, index = 0 }: EntryCardProps) {
   const moodConfig = MOOD_CONFIG[entry.mood];
+
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  /**
+   * Entrance animation with stagger based on index
+   */
+  useEffect(() => {
+    const delay = Math.min(index * 50, 300);
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [fadeAnim, slideAnim, index]);
 
   /**
    * Handle card press - navigate to entry detail
    */
   const handlePress = () => {
     router.push(`/(journal)/entry/${entry.id}`);
+  };
+
+  /**
+   * Handle press in - scale down
+   */
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.98,
+      useNativeDriver: true,
+      tension: 100,
+      friction: 10,
+    }).start();
+  };
+
+  /**
+   * Handle press out - scale back
+   */
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 100,
+      friction: 10,
+    }).start();
   };
 
   /**
@@ -72,110 +135,156 @@ export function EntryCard({ entry, onDelete, showDeleteOption = true }: EntryCar
   const formattedDate = formatShortDate(entry.createdAt);
 
   return (
-    <Pressable
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-      onPress={handlePress}
-      onLongPress={handleLongPress}
-      delayLongPress={500}
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [
+            { translateY: slideAnim },
+            { scale: scaleAnim },
+          ],
+        },
+      ]}
     >
-      {/* Mood color strip */}
-      <View style={[styles.moodStrip, { backgroundColor: moodConfig.color }]} />
+      <Pressable
+        style={styles.card}
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onLongPress={handleLongPress}
+        delayLongPress={500}
+      >
+        {/* Mood color strip with gradient effect */}
+        <View style={[styles.moodStrip, { backgroundColor: moodConfig.color }]}>
+          <View style={[styles.moodStripHighlight, { backgroundColor: moodConfig.color }]} />
+        </View>
 
-      {/* Card content */}
-      <View style={styles.content}>
-        {/* Header with mood emoji and title */}
-        <View style={styles.header}>
-          <Text style={styles.moodEmoji}>{moodConfig.emoji}</Text>
-          <Text style={styles.title} numberOfLines={1}>
-            {entry.title}
+        {/* Card content */}
+        <View style={styles.content}>
+          {/* Header with mood badge and title */}
+          <View style={styles.header}>
+            <View style={[styles.moodBadge, { backgroundColor: `${moodConfig.color}15` }]}>
+              <Text style={styles.moodEmoji}>{moodConfig.emoji}</Text>
+            </View>
+            <View style={styles.headerText}>
+              <Text style={styles.title} numberOfLines={1}>
+                {entry.title}
+              </Text>
+              <Text style={styles.date}>{formattedDate}</Text>
+            </View>
+          </View>
+
+          {/* Body preview */}
+          <Text style={styles.bodyPreview} numberOfLines={2}>
+            {getBodyPreview()}
           </Text>
-        </View>
 
-        {/* Body preview */}
-        <Text style={styles.bodyPreview} numberOfLines={2}>
-          {getBodyPreview()}
-        </Text>
-
-        {/* Footer with date, word count, and image indicator */}
-        <View style={styles.footer}>
-          <View style={styles.footerLeft}>
-            <Text style={styles.date}>{formattedDate}</Text>
-            <View style={styles.dot} />
-            <Text style={styles.wordCount}>{entry.wordCount} words</Text>
-          </View>
-
-          <View style={styles.footerRight}>
-            {/* Image indicator */}
-            {entry.imageUrl && (
-              <View style={styles.imageIndicator}>
-                <Ionicons name="image-outline" size={14} color={COLORS.textSecondary} />
+          {/* Footer with metadata */}
+          <View style={styles.footer}>
+            <View style={styles.footerLeft}>
+              <View style={styles.metaItem}>
+                <Ionicons name="text-outline" size={12} color={COLORS.textSecondary} />
+                <Text style={styles.metaText}>{entry.wordCount} words</Text>
               </View>
-            )}
 
-            {/* Tags indicator */}
-            {entry.tags.length > 0 && (
-              <View style={styles.tagsIndicator}>
-                <Ionicons name="pricetag-outline" size={14} color={COLORS.textSecondary} />
-                <Text style={styles.tagsCount}>{entry.tags.length}</Text>
-              </View>
-            )}
+              {/* Tags indicator */}
+              {entry.tags && entry.tags.length > 0 && (
+                <View style={styles.metaItem}>
+                  <Ionicons name="pricetag-outline" size={12} color={COLORS.textSecondary} />
+                  <Text style={styles.metaText}>{entry.tags.length}</Text>
+                </View>
+              )}
+
+              {/* Image indicator */}
+              {entry.imageUrl && (
+                <View style={styles.metaItem}>
+                  <Ionicons name="image-outline" size={12} color={COLORS.textSecondary} />
+                </View>
+              )}
+            </View>
+
+            {/* Arrow indicator */}
+            <Ionicons name="chevron-forward" size={16} color={COLORS.border} />
           </View>
+
+          {/* Image thumbnail if exists */}
+          {entry.imageUrl && (
+            <View style={styles.thumbnailContainer}>
+              <Image
+                source={{ uri: entry.imageUrl }}
+                style={styles.thumbnail}
+                resizeMode="cover"
+              />
+            </View>
+          )}
         </View>
-
-        {/* Small image thumbnail if exists */}
-        {entry.imageUrl && (
-          <View style={styles.thumbnailContainer}>
-            <Image
-              source={{ uri: entry.imageUrl }}
-              style={styles.thumbnail}
-              resizeMode="cover"
-            />
-          </View>
-        )}
-      </View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    marginBottom: SPACING.md,
+  },
   card: {
     flexDirection: 'row',
     backgroundColor: COLORS.surface,
     borderRadius: BORDER_RADIUS.lg,
-    marginBottom: SPACING.md,
     overflow: 'hidden',
     ...SHADOWS.md,
   },
-  cardPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.99 }],
-  },
   moodStrip: {
-    width: 4,
+    width: 5,
+    position: 'relative',
+  },
+  moodStripHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '50%',
+    opacity: 0.7,
   },
   content: {
     flex: 1,
     padding: SPACING.lg,
+    position: 'relative',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: SPACING.sm,
   },
+  moodBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
   moodEmoji: {
-    fontSize: FONT_SIZES.xl,
-    marginRight: SPACING.sm,
+    fontSize: FONT_SIZES.lg,
+  },
+  headerText: {
+    flex: 1,
   },
   title: {
-    flex: 1,
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONT_SIZES.md,
     fontWeight: '600',
     color: COLORS.textPrimary,
+    marginBottom: 2,
+  },
+  date: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textSecondary,
   },
   bodyPreview: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONT_SIZES.sm,
     color: COLORS.textSecondary,
-    lineHeight: 22,
+    lineHeight: 20,
     marginBottom: SPACING.md,
   },
   footer: {
@@ -186,37 +295,14 @@ const styles = StyleSheet.create({
   footerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  date: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  dot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: COLORS.textSecondary,
-    marginHorizontal: SPACING.sm,
-  },
-  wordCount: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  footerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: SPACING.md,
   },
-  imageIndicator: {
-    opacity: 0.7,
-  },
-  tagsIndicator: {
+  metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    opacity: 0.7,
+    gap: 4,
   },
-  tagsCount: {
+  metaText: {
     fontSize: FONT_SIZES.xs,
     color: COLORS.textSecondary,
   },
@@ -224,8 +310,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: SPACING.lg,
     right: SPACING.lg,
-    width: 50,
-    height: 50,
+    width: 48,
+    height: 48,
     borderRadius: BORDER_RADIUS.md,
     overflow: 'hidden',
     ...SHADOWS.sm,
