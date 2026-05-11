@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS } from '../../constants/theme';
 import { CONFIG } from '../../constants/config';
+import { useAuth } from '../../context/AuthContext';
 
 /**
  * Settings item component
@@ -69,6 +70,8 @@ function SettingsSection({ title, children }: SettingsSectionProps) {
  * Settings screen component
  */
 export default function SettingsScreen() {
+  const { lock } = useAuth();
+
   /**
    * Handle lock now action
    */
@@ -77,7 +80,10 @@ export default function SettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Lock',
-        onPress: () => router.replace('/(auth)/lock'),
+        onPress: () => {
+          lock();
+          router.replace('/(auth)/lock');
+        },
       },
     ]);
   };

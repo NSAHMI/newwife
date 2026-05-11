@@ -8,6 +8,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import { COLORS } from '../constants/theme';
+import { AuthProvider } from '../context/AuthContext';
 import { isFirebaseConfigured, getFirebaseStatus } from '../services/firebase';
 import { isSupabaseConfigured, getSupabaseStatus } from '../services/supabase';
 
@@ -35,30 +36,32 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: COLORS.background },
-          animation: 'slide_from_right',
-        }}
-      >
-        <Stack.Screen
-          name="(auth)"
-          options={{
+    <AuthProvider>
+      <View style={styles.container}>
+        <StatusBar style="dark" />
+        <Stack
+          screenOptions={{
             headerShown: false,
-            animation: 'fade',
+            contentStyle: { backgroundColor: COLORS.background },
+            animation: 'slide_from_right',
           }}
-        />
-        <Stack.Screen
-          name="(journal)"
-          options={{
-            headerShown: false,
-          }}
-        />
-      </Stack>
-    </View>
+        >
+          <Stack.Screen
+            name="(auth)"
+            options={{
+              headerShown: false,
+              animation: 'fade',
+            }}
+          />
+          <Stack.Screen
+            name="(journal)"
+            options={{
+              headerShown: false,
+            }}
+          />
+        </Stack>
+      </View>
+    </AuthProvider>
   );
 }
 

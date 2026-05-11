@@ -4,26 +4,107 @@
  * Users must authenticate to access the journal
  */
 
-import { View, Text, StyleSheet, Pressable, SafeAreaView } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable, SafeAreaView, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { COLORS, FONT_SIZES, SPACING, BORDER_RADIUS } from '../../constants/theme';
+import { useBiometric } from '../../hooks/useBiometric';
+import { useAuth } from '../../context/AuthContext';
 
 /**
  * Lock screen component
  * Displays the biometric unlock interface
  */
 export default function LockScreen() {
+  const [error, setError] = useState<string | null>(null);
+  const [showNotEnrolled, setShowNotEnrolled] = useState(false);
+
+  const {
+    hasBiometrics,
+    isEnrolled,
+    isAuthenticating,
+    isLoading: isBiometricLoading,
+    authenticate,
+    getPrimaryBiometricType,
+  } = useBiometric();
+
+  const {
+    isAuthenticated,
+    isAuthenticating: isUnlocking,
+    unlock,
+    error: authError,
+    clearError,
+  } = useAuth();
+
+  /**
+   * Redirect to journal if already authenticated
+   */
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace('/(journal)/');
+    }
+  }, [isAuthenticated]);
+
+  /**
+   * Show biometrics not enrolled warning
+   */
+  useEffect(() => {
+    if (!isBiometricLoading && hasBiometrics && !isEnrolled) {
+      setShowNotEnrolled(true);
+    }
+  }, [isBiometricLoading, hasBiometrics, isEnrolled]);
+
   /**
    * Handle unlock button press
-   * In Phase 2, this will trigger biometric authentication
-   * For now, it navigates directly to the journal
+   * Triggers biometric authentication, then Firebase sign in
    */
-  const handleUnlock = () => {
-    // TODO: Implement biometric authentication in Phase 2
-    router.replace('/(journal)/');
+  const handleUnlock = async () => {
+    setError(null);
+    clearError();
+
+    // If biometrics not enrolled, show message
+    if (!isEnrolled) {
+      setShowNotEnrolled(true);
+      return;
+    }
+
+    // Authenticate with biometrics
+    const result = await authenticate();
+
+    if (result.success) {
+      // Biometric auth successful, now unlock (Firebase sign in)
+      await unlock();
+    } else if (result.warning) {
+      setShowNotEnrolled(true);
+    } else if (result.error) {
+      setError(result.error);
+    }
   };
+
+  /**
+   * Get the appropriate icon based on biometric type
+   */
+  const getBiometricIcon = (): keyof typeof Ionicons.glyphMap => {
+    const primaryType = getPrimaryBiometricType();
+    if (primaryType === 'Face ID') {
+      return 'scan-outline';
+    }
+    return 'finger-print';
+  };
+
+  /**
+   * Get button text based on biometric type
+   */
+  const getButtonText = (): string => {
+    if (isBiometricLoading) return 'Loading...';
+    if (!hasBiometrics) return 'Use Device Passcode';
+    const primaryType = getPrimaryBiometricType();
+    return `Unlock with ${primaryType}`;
+  };
+
+  const isProcessing = isAuthenticating || isUnlocking || isBiometricLoading;
 
   return (
     <LinearGradient
@@ -46,21 +127,49 @@ export default function LockScreen() {
             <Ionicons name="lock-closed" size={64} color={COLORS.surface} />
           </View>
 
+          {/* Error Message */}
+          {(error || authError) && (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle" size={20} color={COLORS.error} />
+              <Text style={styles.errorText}>{error || authError}</Text>
+            </View>
+          )}
+
+          {/* Not Enrolled Warning */}
+          {showNotEnrolled && !error && (
+            <View style={styles.warningContainer}>
+              <Ionicons name="warning" size={20} color={COLORS.warning} />
+              <Text style={styles.warningText}>
+                Set up Face ID or Fingerprint in your device settings to use Journal Lock.
+              </Text>
+            </View>
+          )}
+
           {/* Unlock Button */}
           <View style={styles.buttonContainer}>
             <Pressable
               style={({ pressed }) => [
                 styles.unlockButton,
                 pressed && styles.unlockButtonPressed,
+                isProcessing && styles.unlockButtonDisabled,
               ]}
               onPress={handleUnlock}
+              disabled={isProcessing}
             >
-              <Ionicons name="finger-print" size={24} color={COLORS.primary} />
-              <Text style={styles.unlockButtonText}>Unlock Journal</Text>
+              {isProcessing ? (
+                <ActivityIndicator color={COLORS.primary} size="small" />
+              ) : (
+                <>
+                  <Ionicons name={getBiometricIcon()} size={24} color={COLORS.primary} />
+                  <Text style={styles.unlockButtonText}>{getButtonText()}</Text>
+                </>
+              )}
             </Pressable>
 
             <Text style={styles.fallbackText}>
-              Use Face ID, Fingerprint, or Device Passcode
+              {hasBiometrics && isEnrolled
+                ? `Use ${getPrimaryBiometricType()} or Device Passcode`
+                : 'Biometric authentication required'}
             </Text>
           </View>
         </View>
@@ -112,6 +221,38 @@ const styles = StyleSheet.create({
   lockIconContainer: {
     opacity: 0.3,
   },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${COLORS.error}20`,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.surface,
+  },
+  warningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${COLORS.warning}20`,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    gap: SPACING.sm,
+    marginBottom: SPACING.lg,
+    maxWidth: '100%',
+  },
+  warningText: {
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.surface,
+    lineHeight: 20,
+  },
   buttonContainer: {
     width: '100%',
     alignItems: 'center',
@@ -127,10 +268,14 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.xl,
     width: '100%',
     gap: SPACING.md,
+    minHeight: 56,
   },
   unlockButtonPressed: {
     opacity: 0.9,
     transform: [{ scale: 0.98 }],
+  },
+  unlockButtonDisabled: {
+    opacity: 0.7,
   },
   unlockButtonText: {
     fontSize: FONT_SIZES.lg,
