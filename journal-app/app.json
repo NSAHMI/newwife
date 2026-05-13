@@ -41,6 +41,14 @@
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id"
+      }
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
     "plugins": [
       "expo-secure-store",
       [
