@@ -9,29 +9,56 @@
 export const COLORS = {
   // Primary brand colors
   primary: '#2D3142',      // Deep navy - main brand color
+  primaryLight: '#3D4156', // Lighter navy for hover states
+  primaryDark: '#1D2132',  // Darker navy for pressed states
   accent: '#EF8354',       // Warm orange - accent/CTA color
+  accentLight: '#F4A785',  // Light orange for backgrounds
+  accentDark: '#D86B3D',   // Dark orange for pressed states
 
   // Background colors
   background: '#F9F7F4',   // Warm off-white - main background
+  backgroundSecondary: '#F3F0EC', // Slightly darker for contrast
   surface: '#FFFFFF',      // Pure white - cards, modals
+  surfaceElevated: '#FEFEFE', // Slightly elevated surface
 
   // Text colors
   textPrimary: '#1A1A2E',  // Near black - primary text
   textSecondary: '#6B7280', // Gray - secondary/muted text
+  textTertiary: '#9CA3AF', // Lighter gray for hints
+  textInverse: '#FFFFFF',  // White text on dark backgrounds
 
   // UI colors
   border: '#E5E7EB',       // Light gray - borders, dividers
+  borderLight: '#F3F4F6',  // Very light border
   error: '#DC2626',        // Red - error states
+  errorLight: '#FEE2E2',   // Light red background
   success: '#10B981',      // Green - success states
+  successLight: '#D1FAE5', // Light green background
   warning: '#F59E0B',      // Amber - warning states
+  warningLight: '#FEF3C7', // Light amber background
+  info: '#3B82F6',         // Blue - info states
+  infoLight: '#DBEAFE',    // Light blue background
 
   // Lock screen gradient colors
   gradientStart: '#2D3142',
+  gradientMiddle: '#3D4A5C',
   gradientEnd: '#4A5568',
+
+  // Additional gradients for visual interest
+  warmGradientStart: '#EF8354',
+  warmGradientEnd: '#F59E0B',
+  coolGradientStart: '#6366F1',
+  coolGradientEnd: '#8B5CF6',
 
   // Overlay colors
   overlay: 'rgba(0, 0, 0, 0.5)',
   overlayLight: 'rgba(0, 0, 0, 0.3)',
+  overlayDark: 'rgba(0, 0, 0, 0.7)',
+
+  // Card backgrounds with subtle colors
+  cardWarm: '#FFF8F5',
+  cardCool: '#F5F7FF',
+  cardNeutral: '#F8F9FA',
 } as const;
 
 /**
@@ -173,9 +200,24 @@ export const SHADOWS = {
  * Animation duration constants (in milliseconds)
  */
 export const ANIMATION = {
+  instant: 100,
   fast: 150,
   normal: 300,
   slow: 500,
+  verySlow: 800,
+} as const;
+
+/**
+ * Gradient presets for consistent styling
+ */
+export const GRADIENTS = {
+  primary: [COLORS.gradientStart, COLORS.gradientMiddle, COLORS.gradientEnd],
+  warm: [COLORS.warmGradientStart, COLORS.warmGradientEnd],
+  cool: [COLORS.coolGradientStart, COLORS.coolGradientEnd],
+  sunset: ['#FF6B6B', '#FFA07A', '#FFD93D'],
+  ocean: ['#4FACFE', '#00F2FE'],
+  forest: ['#134E5E', '#71B280'],
+  lavender: ['#E0C3FC', '#8EC5FC'],
 } as const;
 
 /**

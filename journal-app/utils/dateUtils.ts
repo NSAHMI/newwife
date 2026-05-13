@@ -212,3 +212,30 @@ export function formatRelativeTime(date: Date | string | Timestamp): string {
 
   return formatShortDate(dateObj);
 }
+
+/**
+ * Alias for formatRelativeTime for consistency
+ * @param date - Date to format
+ * @returns Relative time string
+ */
+export const formatRelativeDate = formatRelativeTime;
+
+/**
+ * Get time of day greeting
+ * @returns "morning", "afternoon", or "evening"
+ */
+export function getTimeOfDay(): 'morning' | 'afternoon' | 'evening' {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  return 'evening';
+}
+
+/**
+ * Get a friendly greeting based on time of day
+ * @returns Greeting string like "Good morning"
+ */
+export function getGreeting(): string {
+  const timeOfDay = getTimeOfDay();
+  return `Good ${timeOfDay}`;
+}
