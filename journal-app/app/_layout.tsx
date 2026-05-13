@@ -3,15 +3,14 @@
  * Main application layout that wraps all screens with providers
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import { COLORS } from '../constants/theme';
 import { AuthProvider } from '../context/AuthContext';
 import { JournalProvider } from '../context/JournalContext';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
-import { NetworkStatus } from '../components/ui/NetworkStatus';
 import { isFirebaseConfigured, getFirebaseStatus } from '../services/firebase';
 import { isSupabaseConfigured, getSupabaseStatus } from '../services/supabase';
 
@@ -20,23 +19,41 @@ import { isSupabaseConfigured, getSupabaseStatus } from '../services/supabase';
  * Sets up the navigation stack and global providers
  */
 export default function RootLayout() {
+  const [isReady, setIsReady] = useState(false);
+
   useEffect(() => {
     // Log initialization status on app start
-    const firebaseStatus = getFirebaseStatus();
-    const supabaseStatus = getSupabaseStatus();
+    try {
+      const firebaseStatus = getFirebaseStatus();
+      const supabaseStatus = getSupabaseStatus();
 
-    console.log('=== Journal App Initialization ===');
-    console.log('Firebase Status:', firebaseStatus);
-    console.log('Supabase Status:', supabaseStatus);
+      console.log('=== Journal App Initialization ===');
+      console.log('Firebase Status:', firebaseStatus);
+      console.log('Supabase Status:', supabaseStatus);
 
-    if (!isFirebaseConfigured()) {
-      console.warn('Firebase is not properly configured. Check your .env.local file.');
+      if (!isFirebaseConfigured()) {
+        console.warn('Firebase is not properly configured. Check your .env.local file.');
+      }
+
+      if (!isSupabaseConfigured()) {
+        console.warn('Supabase is not properly configured. Check your .env.local file.');
+      }
+    } catch (error) {
+      console.error('Error during initialization:', error);
     }
 
-    if (!isSupabaseConfigured()) {
-      console.warn('Supabase is not properly configured. Check your .env.local file.');
-    }
+    // Mark as ready
+    setIsReady(true);
   }, []);
+
+  if (!isReady) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.accent} />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <ErrorBoundary>
@@ -44,7 +61,6 @@ export default function RootLayout() {
         <JournalProvider>
           <View style={styles.container}>
             <StatusBar style="dark" />
-            <NetworkStatus />
             <Stack
               screenOptions={{
                 headerShown: false,
@@ -52,6 +68,12 @@ export default function RootLayout() {
                 animation: 'slide_from_right',
               }}
             >
+              <Stack.Screen
+                name="index"
+                options={{
+                  headerShown: false,
+                }}
+              />
               <Stack.Screen
                 name="(auth)"
                 options={{
@@ -77,5 +99,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: COLORS.textSecondary,
   },
 });
