@@ -1,77 +1,62 @@
-/**
- * LoadingOverlay Component
- * Full-screen loading indicator overlay
- */
-
 import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Modal } from 'react-native';
-import { COLORS, FONT_SIZES, SPACING, BORDER_RADIUS, Z_INDEX } from '../../constants/theme';
+import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 
-/**
- * LoadingOverlay props
- */
 interface LoadingOverlayProps {
-  /** Whether the overlay is visible */
-  visible: boolean;
-  /** Loading message to display */
   message?: string;
-  /** Whether to use a modal (blocks interaction) */
-  modal?: boolean;
+  fullScreen?: boolean;
 }
 
-/**
- * LoadingOverlay component
- * Shows a loading spinner with optional message
- */
-export function LoadingOverlay({
-  visible,
-  message = 'Loading...',
-  modal = true,
-}: LoadingOverlayProps) {
-  if (!visible) return null;
+export function LoadingOverlay({ message, fullScreen = true }: LoadingOverlayProps) {
+  if (!fullScreen) {
+    return (
+      <View style={styles.inline}>
+        <ActivityIndicator size="small" color={COLORS.accent} />
+        {message && <Text style={styles.inlineText}>{message}</Text>}
+      </View>
+    );
+  }
 
-  const content = (
+  return (
     <View style={styles.container}>
-      <View style={styles.content}>
+      <View style={styles.card}>
         <ActivityIndicator size="large" color={COLORS.accent} />
         {message && <Text style={styles.message}>{message}</Text>}
       </View>
     </View>
   );
-
-  if (modal) {
-    return (
-      <Modal transparent visible={visible} animationType="fade">
-        {content}
-      </Modal>
-    );
-  }
-
-  return content;
 }
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
+    ...StyleSheet.absoluteFill,
     backgroundColor: COLORS.overlay,
-    zIndex: Z_INDEX.overlay,
-  },
-  content: {
-    backgroundColor: COLORS.surface,
-    paddingVertical: SPACING.xxl,
-    paddingHorizontal: SPACING.xxxl,
-    borderRadius: BORDER_RADIUS.xl,
     alignItems: 'center',
-    minWidth: 150,
+    justifyContent: 'center',
+    zIndex: 999,
+  },
+  card: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.xl,
+    paddingHorizontal: SPACING.xxxl,
+    paddingVertical: SPACING.xxl,
+    alignItems: 'center',
+    gap: SPACING.lg,
+    ...SHADOWS.lg,
   },
   message: {
-    marginTop: SPACING.lg,
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textPrimary,
+    fontSize: FONTS.md,
+    color: COLORS.textSecondary,
     textAlign: 'center',
   },
+  inline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+  },
+  inlineText: {
+    fontSize: FONTS.sm,
+    color: COLORS.textSecondary,
+  },
 });
-
-export default LoadingOverlay;

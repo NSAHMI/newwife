@@ -6,30 +6,22 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "scheme": "journal-app",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F9F7F4"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.journal.app",
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Use Face ID to securely access your journal",
-        "NSPhotoLibraryUsageDescription": "Allow access to your photo library to attach images to journal entries",
-        "NSCameraUsageDescription": "Allow camera access to take photos for your journal entries"
+        "NSFaceIDUsageDescription": "Use Face ID to securely access your private journal.",
+        "NSPhotoLibraryUsageDescription": "Allow access to attach photos to your journal entries.",
+        "NSCameraUsageDescription": "Allow access to take photos for your journal entries."
       }
     },
     "android": {
       "package": "com.journal.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F9F7F4"
+        "backgroundColor": "#F9F7F4",
+        "foregroundImage": "./assets/icon.png"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
       "permissions": [
         "USE_BIOMETRIC",
         "USE_FINGERPRINT",
@@ -38,38 +30,27 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/icon.png",
       "bundler": "metro"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "your-project-id"
-      }
-    },
-    "experiments": {
-      "typedRoutes": true
     },
     "plugins": [
       "expo-secure-store",
-      [
-        "expo-router",
-        {
-          "root": "./app"
-        }
-      ],
+      "expo-router",
+      "expo-status-bar",
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Use Face ID to securely access your journal"
+          "faceIDPermission": "Allow Journal to use Face ID for secure access."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow access to your photo library to attach images to journal entries",
-          "cameraPermission": "Allow camera access to take photos for your journal entries"
+          "photosPermission": "Allow Journal to access your photos for journal entries.",
+          "cameraPermission": "Allow Journal to take photos for journal entries."
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }

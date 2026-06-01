@@ -1,386 +1,224 @@
-/**
- * Settings Screen
- * App configuration and data management
- */
-
-import { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+  TouchableOpacity,
   ScrollView,
-  Pressable,
-  SafeAreaView,
+  Switch,
   Alert,
-  ActivityIndicator,
-  Share,
+  StyleSheet,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { Paths, File } from 'expo-file-system';
+import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS } from '../../constants/theme';
-import { CONFIG } from '../../constants/config';
 import { useAuth } from '../../context/AuthContext';
 import { useJournal } from '../../context/JournalContext';
-import { useSettings } from '../../hooks/useSettings';
-import { LoadingOverlay } from '../../components/ui/LoadingOverlay';
-import { formatDateTime } from '../../utils/dateUtils';
+import { ConfirmModal } from '../../components/ui/ConfirmModal';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CONFIG, STORAGE_KEYS } from '../../constants/config';
+import { formatDate } from '../../utils/dateUtils';
 
-/**
- * Settings item component
- */
-type SettingsItemProps = {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  subtitle?: string;
-  value?: string;
-  onPress?: () => void;
-  danger?: boolean;
-  loading?: boolean;
-};
-
-function SettingsItem({ icon, title, subtitle, value, onPress, danger, loading }: SettingsItemProps) {
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.settingsItem, pressed && onPress && styles.itemPressed]}
-      onPress={onPress}
-      disabled={!onPress || loading}
-    >
-      <View style={[styles.iconContainer, danger && styles.iconContainerDanger]}>
-        <Ionicons
-          name={icon}
-          size={20}
-          color={danger ? COLORS.error : COLORS.accent}
-        />
-      </View>
-      <View style={styles.itemContent}>
-        <Text style={[styles.itemTitle, danger && styles.itemTitleDanger]}>{title}</Text>
-        {subtitle && <Text style={styles.itemSubtitle}>{subtitle}</Text>}
-      </View>
-      {loading ? (
-        <ActivityIndicator size="small" color={COLORS.accent} />
-      ) : value ? (
-        <Text style={styles.itemValue}>{value}</Text>
-      ) : onPress ? (
-        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-      ) : null}
-    </Pressable>
-  );
-}
-
-/**
- * Settings section component
- */
-type SettingsSectionProps = {
-  title: string;
-  children: React.ReactNode;
-};
-
-function SettingsSection({ title, children }: SettingsSectionProps) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionContent}>{children}</View>
-    </View>
-  );
-}
-
-/**
- * Settings screen component
- */
 export default function SettingsScreen() {
-  const { lock } = useAuth();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { lock, userId } = useAuth();
   const { entries, removeEntry } = useJournal();
-  const { settings, setReLockTimeout, getReLockTimeoutLabel, isLoading: settingsLoading } = useSettings();
-
+  const [reLockTimeout, setReLockTimeout] = useState(CONFIG.RE_LOCK_TIMEOUT_MS);
+  const [showClearAll, setShowClearAll] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
 
-  /**
-   * Calculate estimated storage size
-   */
-  const storageUsed = useMemo(() => {
-    let totalSize = 0;
-    entries.forEach((entry) => {
-      // Estimate size based on content
-      totalSize += (entry.title?.length || 0) * 2; // UTF-16
-      totalSize += (entry.body?.length || 0) * 2;
-      totalSize += entry.tags ? entry.tags.join(',').length * 2 : 0;
-      // Add approximate metadata size
-      totalSize += 200;
-    });
+  useEffect(() => {
+    loadSettings();
+  }, []);
 
-    if (totalSize < 1024) {
-      return `${totalSize} B`;
-    } else if (totalSize < 1024 * 1024) {
-      return `${(totalSize / 1024).toFixed(1)} KB`;
-    } else {
-      return `${(totalSize / (1024 * 1024)).toFixed(1)} MB`;
-    }
-  }, [entries]);
+  const loadSettings = async () => {
+    const stored = await SecureStore.getItemAsync(STORAGE_KEYS.RE_LOCK_TIMEOUT);
+    if (stored) setReLockTimeout(parseInt(stored, 10));
+  };
 
-  /**
-   * Handle lock now action
-   */
+  const handleTimeoutChange = async (value: number) => {
+    setReLockTimeout(value);
+    await SecureStore.setItemAsync(STORAGE_KEYS.RE_LOCK_TIMEOUT, value.toString());
+  };
+
   const handleLockNow = () => {
-    Alert.alert('Lock App', 'Are you sure you want to lock the app?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Lock',
-        onPress: () => {
-          lock();
-          router.replace('/(auth)/lock');
-        },
-      },
-    ]);
+    lock();
+    router.replace('/(auth)/lock');
   };
 
-  /**
-   * Handle re-lock timeout selection
-   */
-  const handleReLockTimeout = () => {
-    Alert.alert(
-      'Re-lock After',
-      'Choose how long the app stays unlocked in the background',
-      [
-        ...CONFIG.RE_LOCK_OPTIONS.map((option) => ({
-          text: option.label + (option.value === settings.reLockTimeout ? ' ✓' : ''),
-          onPress: async () => {
-            try {
-              await setReLockTimeout(option.value);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to update setting. Please try again.');
-            }
-          },
-        })),
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const sortedEntries = [...entries].sort((a, b) => {
+        const aTime = a.createdAt?.toMillis?.() || 0;
+        const bTime = b.createdAt?.toMillis?.() || 0;
+        return aTime - bTime;
+      });
 
-  /**
-   * Generate export content
-   */
-  const generateExportContent = (): string => {
-    let content = '=== JOURNAL EXPORT ===\n';
-    content += `Generated: ${new Date().toLocaleString()}\n`;
-    content += `Total Entries: ${entries.length}\n`;
-    content += '='.repeat(50) + '\n\n';
+      let content = 'MY JOURNAL\n';
+      content += '===========\n\n';
 
-    // Sort entries by date (newest first)
-    const sortedEntries = [...entries].sort((a, b) => {
-      const dateA = a.createdAt instanceof Date ? a.createdAt : a.createdAt.toDate();
-      const dateB = b.createdAt instanceof Date ? b.createdAt : b.createdAt.toDate();
-      return dateB.getTime() - dateA.getTime();
-    });
-
-    sortedEntries.forEach((entry, index) => {
-      content += `--- Entry ${index + 1} ---\n`;
-      content += `Date: ${formatDateTime(entry.createdAt)}\n`;
-      content += `Mood: ${entry.mood}\n`;
-      content += `Title: ${entry.title}\n`;
-      if (entry.tags && entry.tags.length > 0) {
-        content += `Tags: ${entry.tags.map((t) => '#' + t).join(', ')}\n`;
+      for (const entry of sortedEntries) {
+        content += `${formatDate(entry.createdAt)}\n`;
+        content += `Mood: ${entry.mood}\n`;
+        content += `${entry.title}\n`;
+        content += `${'─'.repeat(40)}\n`;
+        content += `${entry.body}\n`;
+        if (entry.tags.length > 0) {
+          content += `Tags: ${entry.tags.join(', ')}\n`;
+        }
+        content += '\n';
       }
-      content += `\n${entry.body}\n`;
-      content += '\n' + '-'.repeat(50) + '\n\n';
-    });
 
-    return content;
-  };
+      const fileUri = FileSystem.documentDirectory + 'journal_export.txt';
+      await FileSystem.writeAsStringAsync(fileUri, content, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
 
-  /**
-   * Handle export journal
-   */
-  const handleExportJournal = async () => {
-    if (entries.length === 0) {
-      Alert.alert('No Entries', 'You don\'t have any journal entries to export yet.');
-      return;
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'text/plain',
+        dialogTitle: 'Export Journal Entries',
+      });
+    } catch (err) {
+      Alert.alert('Export Failed', 'Could not export journal entries.');
+    } finally {
+      setIsExporting(false);
     }
-
-    Alert.alert(
-      'Export Journal',
-      `This will create a text file containing all ${entries.length} entries.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Export',
-          onPress: async () => {
-            setIsExporting(true);
-            try {
-              const content = generateExportContent();
-              const fileName = `journal_export_${new Date().toISOString().split('T')[0]}.txt`;
-              const cacheDir = Paths.cache;
-              const file = new File(cacheDir, fileName);
-              await file.write(content);
-              const filePath = file.uri;
-
-              // Check if sharing is available
-              const isSharingAvailable = await Sharing.isAvailableAsync();
-
-              if (isSharingAvailable) {
-                await Sharing.shareAsync(filePath, {
-                  mimeType: 'text/plain',
-                  dialogTitle: 'Export Journal',
-                });
-              } else {
-                // Fallback to system share
-                await Share.share({
-                  message: content,
-                  title: 'Journal Export',
-                });
-              }
-            } catch (error) {
-              console.error('Export error:', error);
-              Alert.alert('Export Failed', 'Failed to export journal. Please try again.');
-            } finally {
-              setIsExporting(false);
-            }
-          },
-        },
-      ]
-    );
   };
 
-  /**
-   * Handle clear all data
-   */
-  const handleClearData = () => {
-    if (entries.length === 0) {
-      Alert.alert('No Data', 'There is no data to clear.');
-      return;
+  const handleClearAll = async () => {
+    try {
+      for (const entry of entries) {
+        await removeEntry(entry.id);
+      }
+      await SecureStore.deleteItemAsync(STORAGE_KEYS.USER_ID);
+      await SecureStore.deleteItemAsync(STORAGE_KEYS.RE_LOCK_TIMEOUT);
+      await SecureStore.deleteItemAsync(STORAGE_KEYS.LAST_ACTIVE);
+      await SecureStore.deleteItemAsync(STORAGE_KEYS.DRAFT_ENTRY);
+      setShowClearAll(false);
+      lock();
+      router.replace('/(auth)/lock');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to clear all data.');
     }
-
-    Alert.alert(
-      'Clear All Data',
-      `This will permanently delete all ${entries.length} journal entries. This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All Data',
-          style: 'destructive',
-          onPress: () => {
-            // Second confirmation
-            Alert.alert(
-              'Are you absolutely sure?',
-              'All your journal entries will be permanently deleted.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Yes, Delete Everything',
-                  style: 'destructive',
-                  onPress: async () => {
-                    setIsClearing(true);
-                    try {
-                      // Delete all entries
-                      const deletePromises = entries.map((entry) =>
-                        removeEntry(entry.id)
-                      );
-                      await Promise.all(deletePromises);
-                      Alert.alert('Data Cleared', 'All journal entries have been deleted.');
-                    } catch (error) {
-                      console.error('Clear data error:', error);
-                      Alert.alert('Error', 'Failed to clear all data. Some entries may remain.');
-                    } finally {
-                      setIsClearing(false);
-                    }
-                  },
-                },
-              ]
-            );
-          },
-        },
-      ]
-    );
   };
+
+  const timeoutOptions = [
+    { label: '15 seconds', value: 15000 },
+    { label: '30 seconds', value: 30000 },
+    { label: '1 minute', value: 60000 },
+    { label: '5 minutes', value: 300000 },
+  ];
+
+  const totalWords = entries.reduce((sum, e) => sum + e.wordCount, 0);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Security Section */}
-        <SettingsSection title="Security">
-          <SettingsItem
-            icon="time-outline"
-            title="Re-lock after"
-            subtitle="Lock the app when in background"
-            value={settingsLoading ? '...' : getReLockTimeoutLabel()}
-            onPress={handleReLockTimeout}
-          />
-          <SettingsItem
-            icon="lock-closed-outline"
-            title="Lock Now"
-            subtitle="Immediately lock the app"
-            onPress={handleLockNow}
-          />
-        </SettingsSection>
-
-        {/* Storage Section */}
-        <SettingsSection title="Storage">
-          <SettingsItem
-            icon="document-text-outline"
-            title="Journal Entries"
-            subtitle="Total number of entries"
-            value={`${entries.length}`}
-          />
-          <SettingsItem
-            icon="cloud-outline"
-            title="Storage Used"
-            subtitle="Estimated based on entries"
-            value={storageUsed}
-          />
-          <SettingsItem
-            icon="download-outline"
-            title="Export Journal"
-            subtitle="Download all entries as text"
-            onPress={handleExportJournal}
-            loading={isExporting}
-          />
-        </SettingsSection>
-
-        {/* About Section */}
-        <SettingsSection title="About">
-          <SettingsItem
-            icon="information-circle-outline"
-            title="Version"
-            value="1.0.0"
-          />
-          <SettingsItem
-            icon="code-outline"
-            title="Build"
-            value="1"
-          />
-        </SettingsSection>
-
-        {/* Danger Zone */}
-        <SettingsSection title="Danger Zone">
-          <SettingsItem
-            icon="trash-outline"
-            title="Clear All Data"
-            subtitle="Delete all entries and reset app"
-            onPress={handleClearData}
-            danger
-            loading={isClearing}
-          />
-        </SettingsSection>
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Journal App</Text>
-          <Text style={styles.footerText}>Your private thoughts, secured</Text>
+    <ScrollView
+      style={[styles.container, { paddingTop: insets.top }]}
+      contentContainerStyle={styles.content}
+    >
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Security</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="lock-closed" size={20} color={COLORS.textSecondary} />
+              <Text style={styles.rowLabel}>Re-lock after</Text>
+            </View>
+          </View>
+          {timeoutOptions.map((option) => (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.option,
+                reLockTimeout === option.value && styles.optionSelected,
+              ]}
+              onPress={() => handleTimeoutChange(option.value)}
+            >
+              <Text
+                style={[
+                  styles.optionText,
+                  reLockTimeout === option.value && styles.optionTextSelected,
+                ]}
+              >
+                {option.label}
+              </Text>
+              {reLockTimeout === option.value && (
+                <Ionicons name="checkmark" size={18} color={COLORS.accent} />
+              )}
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity style={styles.lockNowButton} onPress={handleLockNow}>
+            <Ionicons name="lock-closed" size={18} color={COLORS.error} />
+            <Text style={styles.lockNowText}>Lock Now</Text>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
 
-      {/* Loading Overlay */}
-      <LoadingOverlay
-        visible={isClearing}
-        message="Clearing all data..."
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Storage</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="stats-chart" size={20} color={COLORS.textSecondary} />
+              <Text style={styles.rowLabel}>Entries</Text>
+            </View>
+            <Text style={styles.rowValue}>{entries.length}</Text>
+          </View>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="text" size={20} color={COLORS.textSecondary} />
+              <Text style={styles.rowLabel}>Total Words</Text>
+            </View>
+            <Text style={styles.rowValue}>{totalWords.toLocaleString()}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.exportButton}
+            onPress={handleExport}
+            disabled={isExporting}
+          >
+            <Ionicons name="download" size={18} color={COLORS.accent} />
+            <Text style={styles.exportText}>
+              {isExporting ? 'Exporting...' : 'Export Journal'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>About</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="information-circle" size={20} color={COLORS.textSecondary} />
+              <Text style={styles.rowLabel}>Version</Text>
+            </View>
+            <Text style={styles.rowValue}>{CONFIG.APP_VERSION}</Text>
+          </View>
+        </View>
+      </View>
+
+      <TouchableOpacity
+        style={styles.dangerButton}
+        onPress={() => setShowClearAll(true)}
+      >
+        <Ionicons name="trash" size={18} color={COLORS.error} />
+        <Text style={styles.dangerText}>Clear All Data</Text>
+      </TouchableOpacity>
+
+      <ConfirmModal
+        visible={showClearAll}
+        title="Clear All Data"
+        message="This will permanently delete ALL your journal entries and images. This action cannot be undone."
+        confirmLabel="Delete Everything"
+        onConfirm={handleClearAll}
+        onCancel={() => setShowClearAll(false)}
+        destructive
       />
-    </SafeAreaView>
+    </ScrollView>
   );
 }
 
@@ -389,79 +227,111 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
+  content: {
     padding: SPACING.lg,
-    paddingBottom: SPACING.xxxxxl,
+    paddingBottom: 100,
   },
   section: {
     marginBottom: SPACING.xxl,
   },
   sectionTitle: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '600',
+    fontSize: FONTS.sm,
+    fontWeight: FONTS.semibold,
     color: COLORS.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
     marginBottom: SPACING.sm,
-    marginLeft: SPACING.sm,
+    marginLeft: SPACING.xs,
   },
-  sectionContent: {
+  card: {
     backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
     ...SHADOWS.sm,
   },
-  settingsItem: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.lg,
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: COLORS.borderLight,
   },
-  itemPressed: {
-    backgroundColor: COLORS.background,
-  },
-  iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: `${COLORS.accent}15`,
-    justifyContent: 'center',
+  rowLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginRight: SPACING.md,
+    gap: SPACING.md,
   },
-  iconContainerDanger: {
-    backgroundColor: `${COLORS.error}15`,
-  },
-  itemContent: {
-    flex: 1,
-  },
-  itemTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: '500',
+  rowLabel: {
+    fontSize: FONTS.md,
     color: COLORS.textPrimary,
   },
-  itemTitleDanger: {
-    color: COLORS.error,
-  },
-  itemSubtitle: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  itemValue: {
-    fontSize: FONT_SIZES.md,
+  rowValue: {
+    fontSize: FONTS.md,
     color: COLORS.textSecondary,
   },
-  footer: {
+  option: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: SPACING.xxl,
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
   },
-  footerText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+  optionSelected: {
+    backgroundColor: COLORS.accent + '10',
+  },
+  optionText: {
+    fontSize: FONTS.md,
+    color: COLORS.textPrimary,
+  },
+  optionTextSelected: {
+    color: COLORS.accent,
+    fontWeight: FONTS.semibold,
+  },
+  lockNowButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+  lockNowText: {
+    fontSize: FONTS.md,
+    color: COLORS.error,
+    fontWeight: FONTS.semibold,
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+    marginTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+  },
+  exportText: {
+    fontSize: FONTS.md,
+    color: COLORS.accent,
+    fontWeight: FONTS.semibold,
+  },
+  dangerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.lg,
+    backgroundColor: COLORS.error + '10',
+    borderRadius: RADIUS.lg,
+    marginTop: SPACING.lg,
+  },
+  dangerText: {
+    fontSize: FONTS.md,
+    color: COLORS.error,
+    fontWeight: FONTS.semibold,
   },
 });
