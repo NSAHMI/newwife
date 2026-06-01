@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,28 +8,30 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image,
   StyleSheet,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useJournal } from '../../context/JournalContext';
 import { useImageUpload } from '../../hooks/useImageUpload';
+import { useAuth } from '../../context/AuthContext';
 import { MoodSelector } from '../../components/entry/MoodSelector';
 import { EntryEditor } from '../../components/entry/EntryEditor';
 import { ImageAttachment } from '../../components/entry/ImageAttachment';
 import { LoadingOverlay } from '../../components/ui/LoadingOverlay';
 import { ConfirmModal } from '../../components/ui/ConfirmModal';
-import { useAuth } from '../../context/AuthContext';
-import { Mood } from '../../types/entry';
+import { Mood, Entry } from '../../types/entry';
 import { COLORS, FONTS, SPACING, RADIUS } from '../../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CONFIG } from '../../constants/config';
 
-export default function NewEntryScreen() {
+export default function EditEntryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useAuth();
-  const { addEntry } = useJournal();
+  const { getEntry, editEntry, removeEntry } = useJournal();
   const {
     imageUri,
     imageUrl,
@@ -47,9 +49,30 @@ export default function NewEntryScreen() {
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [showUnsaved, setShowUnsaved] = useState(false);
+  const [originalEntry, setOriginalEntry] = useState<Entry | null>(null);
 
-  const hasContent = title.length > 0 || body.length > 0;
+  useEffect(() => {
+    loadEntry();
+  }, [id]);
+
+  const loadEntry = async () => {
+    if (!id) return;
+    const found = await getEntry(id);
+    if (found) {
+      setOriginalEntry(found);
+      setTitle(found.title);
+      setBody(found.body);
+      setMood(found.mood);
+      setTags([...found.tags]);
+      if (found.imageUrl) {
+        // Set the existing image URL as the imageUri for display
+        setImageUri(found.imageUrl);
+      }
+    }
+    setIsLoading(false);
+  };
 
   const handleAddTag = (text: string) => {
     if ((text.includes(',') || text.includes('\n')) && tagInput.trim()) {
@@ -82,21 +105,30 @@ export default function NewEntryScreen() {
       let finalImageUrl = imageUrl;
       let finalImagePath = imagePath;
 
-      if (imageUri && !imageUrl && userId) {
-        const entryId = `temp_${Date.now()}`;
-        await upload(userId, entryId, imageUri);
+      // If user picked a new image and hasn't uploaded it yet
+      if (imageUri && !imageUrl && userId && id) {
+        await upload(userId, id, imageUri);
         finalImageUrl = imageUrl;
         finalImagePath = imagePath;
       }
 
-      await addEntry({
-        title: title.trim(),
-        body: body.trim(),
-        mood,
-        imageUrl: finalImageUrl,
-        imagePath: finalImagePath,
-        tags,
-      });
+      // If user removed the image
+      if (!imageUri && originalEntry?.imagePath) {
+        await clearImage();
+        finalImageUrl = null;
+        finalImagePath = null;
+      }
+
+      if (id) {
+        await editEntry(id, {
+          title: title.trim(),
+          body: body.trim(),
+          mood,
+          imageUrl: finalImageUrl,
+          imagePath: finalImagePath,
+          tags,
+        });
+      }
 
       router.back();
     } catch (err) {
@@ -107,12 +139,31 @@ export default function NewEntryScreen() {
   };
 
   const handleBack = () => {
-    if (hasContent) {
-      setShowUnsaved(true);
-    } else {
-      router.back();
-    }
+    setShowUnsaved(true);
   };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <LoadingOverlay message="Loading entry..." />
+      </View>
+    );
+  }
+
+  if (!originalEntry) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
+            <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.errorText}>Entry not found.</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -124,7 +175,7 @@ export default function NewEntryScreen() {
         <TouchableOpacity style={styles.headerButton} onPress={handleBack}>
           <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New Entry</Text>
+        <Text style={styles.headerTitle}>Edit Entry</Text>
         <TouchableOpacity
           style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
           onPress={handleSave}
@@ -139,18 +190,11 @@ export default function NewEntryScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.dateText}>
-          {new Date().toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })}
-        </Text>
-
         <MoodSelector selected={mood} onSelect={setMood} />
 
         <EntryEditor
+          initialTitle={title}
+          initialBody={body}
           onTitleChange={setTitle}
           onBodyChange={setBody}
           placeholder="Write your entry..."
@@ -196,10 +240,10 @@ export default function NewEntryScreen() {
 
       <ConfirmModal
         visible={showUnsaved}
-        title="Unsaved Changes"
+        title="Discard Changes?"
         message="You have unsaved changes. Are you sure you want to discard them?"
         confirmLabel="Discard"
-        cancelLabel="Keep Writing"
+        cancelLabel="Keep Editing"
         onConfirm={() => {
           setShowUnsaved(false);
           router.back();
@@ -258,10 +302,14 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     paddingBottom: 100,
   },
-  dateText: {
-    fontSize: FONTS.sm,
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorText: {
+    fontSize: FONTS.md,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.lg,
   },
   tagsSection: {
     marginTop: SPACING.lg,

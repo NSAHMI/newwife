@@ -1,162 +1,117 @@
-/**
- * Entry Detail Screen
- * View a full journal entry with all details
- */
-
-import { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  SafeAreaView,
-  Alert,
-  Image,
-  ActivityIndicator,
-} from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS, MOOD_CONFIG } from '../../../constants/theme';
-import { Entry } from '../../../types/entry';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useJournal } from '../../../context/JournalContext';
-import { formatDateTime, getReadTime, countWords } from '../../../utils/dateUtils';
+import { useAuth } from '../../../context/AuthContext';
+import { ConfirmModal } from '../../../components/ui/ConfirmModal';
 import { LoadingOverlay } from '../../../components/ui/LoadingOverlay';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, MOOD_COLORS } from '../../../constants/theme';
+import { formatDate, getReadTime } from '../../../utils/dateUtils';
+import { getSignedUrl } from '../../../services/mediaService';
 
-/**
- * Entry detail screen component
- */
 export default function EntryDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getEntry, removeEntry, isLoading: contextLoading } = useJournal();
+  const { entries, removeEntry } = useJournal();
+  const { userId } = useAuth();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
 
-  const [entry, setEntry] = useState<Entry | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null);
 
-  /**
-   * Load entry data
-   */
+  const entry = entries.find((e) => e.id === id);
+
   useEffect(() => {
-    const loadEntry = async () => {
-      if (!id) {
-        setIsLoading(false);
-        return;
-      }
+    if (entry?.imagePath) {
+      loadSignedUrl();
+    }
+  }, [entry?.imagePath]);
 
-      try {
-        const fetchedEntry = await getEntry(id);
-        setEntry(fetchedEntry);
-      } catch (error) {
-        console.error('Error loading entry:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadEntry();
-  }, [id, getEntry]);
-
-  /**
-   * Show loading state
-   */
-  if (isLoading || contextLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.accent} />
-          <Text style={styles.loadingText}>Loading entry...</Text>
-        </View>
-      </SafeAreaView>
-    );
+  async function loadSignedUrl() {
+    if (!entry?.imagePath) return;
+    try {
+      const url = await getSignedUrl(entry.imagePath);
+      setSignedImageUrl(url);
+    } catch (err) {
+      console.error('Failed to load signed URL:', err);
+    }
   }
 
-  /**
-   * Show not found state
-   */
+  const handleDelete = async () => {
+    if (!entry) return;
+    setIsDeleting(true);
+    try {
+      await removeEntry(entry.id, entry.imageUrl, entry.imagePath);
+      setShowDeleteModal(false);
+      router.back();
+    } catch (err) {
+      console.error('Delete failed:', err);
+      Alert.alert('Error', 'Failed to delete entry.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (!entry) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+        </View>
         <View style={styles.notFound}>
           <Ionicons name="document-text-outline" size={64} color={COLORS.border} />
           <Text style={styles.notFoundText}>Entry not found</Text>
-          <Pressable
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </Pressable>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
-  const moodConfig = MOOD_CONFIG[entry.mood];
-  const wordCount = entry.wordCount || countWords(entry.body);
-  const readTime = getReadTime(wordCount);
-  const formattedDate = formatDateTime(entry.createdAt);
-
-  /**
-   * Handle edit action
-   */
-  const handleEdit = () => {
-    router.push(`/(journal)/entry/edit/${entry.id}`);
-  };
-
-  /**
-   * Handle delete action
-   */
-  const handleDelete = () => {
-    Alert.alert(
-      'Delete Entry',
-      'Are you sure you want to delete this entry? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setIsDeleting(true);
-            try {
-              await removeEntry(entry.id);
-              router.back();
-            } catch (error) {
-              console.error('Error deleting entry:', error);
-              Alert.alert('Error', 'Failed to delete entry. Please try again.');
-              setIsDeleting(false);
-            }
-          },
-        },
-      ]
-    );
-  };
+  const moodConfig = MOOD_COLORS[entry.mood];
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Custom Header */}
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <LoadingOverlay visible={isDeleting} message="Deleting..." />
+
       <View style={styles.header}>
-        <Pressable style={styles.headerButton} onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
-        </Pressable>
+        </TouchableOpacity>
         <View style={styles.headerActions}>
-          <Pressable style={styles.headerButton} onPress={handleEdit}>
-            <Ionicons name="pencil" size={22} color={COLORS.accent} />
-          </Pressable>
-          <Pressable style={styles.headerButton} onPress={handleDelete}>
-            <Ionicons name="trash-outline" size={22} color={COLORS.error} />
-          </Pressable>
+          <TouchableOpacity
+            onPress={() => router.push(`/(journal)/entry/edit/${entry.id}`)}
+            style={styles.actionButton}
+          >
+            <Ionicons name="pencil-outline" size={20} color={COLORS.accent} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setShowDeleteModal(true)}
+            style={styles.actionButton}
+          >
+            <Ionicons name="trash-outline" size={20} color={COLORS.error} />
+          </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Date and Mood */}
-        <View style={styles.metaContainer}>
-          <Text style={styles.dateText}>{formattedDate}</Text>
-          <View style={[styles.moodChip, { backgroundColor: `${moodConfig.color}20` }]}>
+        {(signedImageUrl || entry.imageUrl) && (
+          <Image
+            source={{ uri: signedImageUrl || entry.imageUrl || '' }}
+            style={styles.heroImage}
+          />
+        )}
+
+        <View style={styles.meta}>
+          <Text style={styles.date}>{formatDate(entry.createdAt)}</Text>
+          <View style={[styles.moodBadge, { backgroundColor: moodConfig.color + '20' }]}>
             <Text style={styles.moodEmoji}>{moodConfig.emoji}</Text>
             <Text style={[styles.moodLabel, { color: moodConfig.color }]}>
               {moodConfig.label}
@@ -164,50 +119,43 @@ export default function EntryDetailScreen() {
           </View>
         </View>
 
-        {/* Title */}
         <Text style={styles.title}>{entry.title}</Text>
 
-        {/* Image (if present) */}
-        {entry.imageUrl && (
-          <View style={styles.imageContainer}>
-            <Image
-              source={{ uri: entry.imageUrl }}
-              style={styles.image}
-              resizeMode="cover"
-            />
+        <View style={styles.stats}>
+          <View style={styles.statItem}>
+            <Ionicons name="text-outline" size={14} color={COLORS.textMuted} />
+            <Text style={styles.statText}>{entry.wordCount} words</Text>
           </View>
-        )}
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Ionicons name="time-outline" size={14} color={COLORS.textMuted} />
+            <Text style={styles.statText}>{getReadTime(entry.wordCount)}</Text>
+          </View>
+        </View>
 
-        {/* Body */}
         <Text style={styles.body}>{entry.body}</Text>
 
-        {/* Tags */}
-        {entry.tags && entry.tags.length > 0 && (
+        {entry.tags.length > 0 && (
           <View style={styles.tagsContainer}>
             {entry.tags.map((tag) => (
               <View key={tag} style={styles.tag}>
-                <Text style={styles.tagText}>#{tag}</Text>
+                <Text style={styles.tagText}>{tag}</Text>
               </View>
             ))}
           </View>
         )}
-
-        {/* Stats */}
-        <View style={styles.statsContainer}>
-          <View style={styles.stat}>
-            <Ionicons name="text-outline" size={16} color={COLORS.textSecondary} />
-            <Text style={styles.statText}>{wordCount} words</Text>
-          </View>
-          <View style={styles.stat}>
-            <Ionicons name="time-outline" size={16} color={COLORS.textSecondary} />
-            <Text style={styles.statText}>{readTime} min read</Text>
-          </View>
-        </View>
       </ScrollView>
 
-      {/* Loading overlay for delete operation */}
-      <LoadingOverlay visible={isDeleting} message="Deleting entry..." />
-    </SafeAreaView>
+      <ConfirmModal
+        visible={showDeleteModal}
+        title="Delete Entry"
+        message="Are you sure you want to delete this entry? This action cannot be undone."
+        confirmLabel="Delete"
+        isDestructive
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteModal(false)}
+      />
+    </View>
   );
 }
 
@@ -218,143 +166,129 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.sm,
     backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: COLORS.borderLight,
   },
-  headerButton: {
-    padding: SPACING.sm,
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerActions: {
     flexDirection: 'row',
     gap: SPACING.sm,
   },
-  scrollView: {
+  actionButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: COLORS.background,
+  },
+  content: {
     flex: 1,
   },
-  scrollContent: {
-    padding: SPACING.lg,
-    paddingBottom: SPACING.xxxxxl,
+  contentContainer: {
+    paddingBottom: 100,
   },
-  metaContainer: {
+  heroImage: {
+    width: '100%',
+    height: 250,
+    backgroundColor: COLORS.borderLight,
+  },
+  meta: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.md,
   },
-  dateText: {
-    fontSize: FONT_SIZES.sm,
+  date: {
+    fontSize: FONTS.sm,
     color: COLORS.textSecondary,
-    flex: 1,
   },
-  moodChip: {
+  moodBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: SPACING.xs,
     paddingHorizontal: SPACING.md,
-    borderRadius: BORDER_RADIUS.full,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.full,
     gap: SPACING.xs,
   },
   moodEmoji: {
-    fontSize: FONT_SIZES.md,
+    fontSize: FONTS.md,
   },
   moodLabel: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '500',
+    fontSize: FONTS.sm,
+    fontWeight: FONTS.semibold,
   },
   title: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: '700',
+    fontSize: FONTS.xxl,
+    fontWeight: FONTS.bold,
     color: COLORS.textPrimary,
-    marginBottom: SPACING.xl,
-    lineHeight: 34,
+    paddingHorizontal: SPACING.xl,
+    marginBottom: SPACING.md,
   },
-  imageContainer: {
-    marginBottom: SPACING.xl,
-    borderRadius: BORDER_RADIUS.lg,
-    overflow: 'hidden',
-    ...SHADOWS.md,
-  },
-  image: {
-    width: '100%',
-    height: 250,
-  },
-  body: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textPrimary,
-    lineHeight: 26,
-    marginBottom: SPACING.xl,
-  },
-  tagsContainer: {
+  stats: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.sm,
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
     marginBottom: SPACING.xl,
+    gap: SPACING.md,
   },
-  tag: {
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.md,
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  tagText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: SPACING.xl,
-    paddingTop: SPACING.lg,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  stat: {
+  statItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.xs,
   },
   statText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textSecondary,
+    fontSize: FONTS.sm,
+    color: COLORS.textMuted,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: SPACING.xxl,
+  statDivider: {
+    width: 1,
+    height: 14,
+    backgroundColor: COLORS.border,
   },
-  loadingText: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.lg,
+  body: {
+    fontSize: FONTS.md,
+    color: COLORS.textPrimary,
+    lineHeight: 26,
+    paddingHorizontal: SPACING.xl,
+    marginBottom: SPACING.xxl,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: SPACING.xl,
+    gap: SPACING.sm,
+  },
+  tag: {
+    backgroundColor: COLORS.accent + '15',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.full,
+  },
+  tagText: {
+    fontSize: FONTS.sm,
+    color: COLORS.accent,
   },
   notFound: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: SPACING.xxl,
+    gap: SPACING.lg,
   },
   notFoundText: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONTS.lg,
     color: COLORS.textSecondary,
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.xl,
-  },
-  backButton: {
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.xxl,
-    backgroundColor: COLORS.accent,
-    borderRadius: BORDER_RADIUS.lg,
-  },
-  backButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: '600',
-    color: COLORS.surface,
   },
 });

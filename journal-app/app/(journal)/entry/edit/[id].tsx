@@ -1,425 +1,249 @@
-/**
- * Edit Entry Screen
- * Edit an existing journal entry
- */
-
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
   ScrollView,
-  Pressable,
-  SafeAreaView,
-  Alert,
+  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, FONT_SIZES, SPACING, SHADOWS, BORDER_RADIUS } from '../../../../constants/theme';
-import { CONFIG } from '../../../../constants/config';
-import { Mood, Entry } from '../../../../types/entry';
-import { useJournal } from '../../../../context/JournalContext';
-import { useImageUpload } from '../../../../hooks/useImageUpload';
-import { MoodSelector } from '../../../../components/entry/MoodSelector';
-import { ImageAttachment } from '../../../../components/entry/ImageAttachment';
-import { LoadingOverlay } from '../../../../components/ui/LoadingOverlay';
-import { countWords } from '../../../../utils/dateUtils';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useJournal } from '../../../context/JournalContext';
+import { useAuth } from '../../../context/AuthContext';
+import { useImageUpload } from '../../../hooks/useImageUpload';
+import { MoodSelector } from '../../../components/entry/MoodSelector';
+import { ImageAttachment } from '../../../components/entry/ImageAttachment';
+import { LoadingOverlay } from '../../../components/ui/LoadingOverlay';
+import { COLORS, FONTS, SPACING, RADIUS } from '../../../constants/theme';
+import { Mood } from '../../../types/entry';
+import { CONFIG } from '../../../constants/config';
 
-/**
- * Edit entry screen component
- */
 export default function EditEntryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getEntry, editEntry, isLoading: contextLoading } = useJournal();
-  const {
-    imageState,
-    isUploading,
-    uploadProgress,
-    pickImage,
-    takePhoto,
-    clearImage,
-    upload,
-    setExistingImage,
-  } = useImageUpload();
+  const { entries, editEntry, removeEntry } = useJournal();
+  const { userId } = useAuth();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
 
-  const [originalEntry, setOriginalEntry] = useState<Entry | null>(null);
+  const entry = entries.find((e) => e.id === id);
+
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [selectedMood, setSelectedMood] = useState<Mood>('calm');
+  const [mood, setMood] = useState<Mood | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasChanges, setHasChanges] = useState(false);
 
-  /**
-   * Load original entry data
-   */
+  const {
+    imageUri,
+    imageUrl,
+    isUploading,
+    uploadProgress,
+    pickImage,
+    uploadToSupabase,
+    clearImage,
+    setImageUri,
+    setImageUrl,
+    setImagePath,
+  } = useImageUpload();
+
   useEffect(() => {
-    const loadEntry = async () => {
-      if (!id) {
-        setIsLoading(false);
-        return;
+    if (entry) {
+      setTitle(entry.title);
+      setBody(entry.body);
+      setMood(entry.mood);
+      setTags(entry.tags || []);
+      if (entry.imageUrl) {
+        setImageUrl(entry.imageUrl);
       }
-
-      try {
-        const fetchedEntry = await getEntry(id);
-        if (fetchedEntry) {
-          setOriginalEntry(fetchedEntry);
-          setTitle(fetchedEntry.title);
-          setBody(fetchedEntry.body);
-          setSelectedMood(fetchedEntry.mood);
-          setTags(fetchedEntry.tags || []);
-
-          // Set existing image if present
-          if (fetchedEntry.imageUrl || fetchedEntry.imagePath) {
-            setExistingImage(fetchedEntry.imageUrl, fetchedEntry.imagePath);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading entry:', error);
-      } finally {
-        setIsLoading(false);
+      if (entry.imagePath) {
+        setImagePath(entry.imagePath);
       }
-    };
-
-    loadEntry();
-  }, [id, getEntry, setExistingImage]);
-
-  /**
-   * Track changes
-   */
-  useEffect(() => {
-    if (originalEntry) {
-      const titleChanged = title !== originalEntry.title;
-      const bodyChanged = body !== originalEntry.body;
-      const moodChanged = selectedMood !== originalEntry.mood;
-      const tagsChanged = JSON.stringify(tags) !== JSON.stringify(originalEntry.tags || []);
-      const imageChanged =
-        imageState.localUri !== null ||
-        (imageState.remoteUrl !== originalEntry.imageUrl);
-
-      setHasChanges(titleChanged || bodyChanged || moodChanged || tagsChanged || imageChanged);
     }
-  }, [title, body, selectedMood, tags, imageState, originalEntry]);
+  }, [entry]);
 
-  /**
-   * Calculate word count from body text
-   */
-  const wordCount = countWords(body);
-
-  /**
-   * Handle adding a new tag
-   */
-  const handleAddTag = () => {
-    const trimmedTag = tagInput.trim().toLowerCase();
-    if (trimmedTag && !tags.includes(trimmedTag) && tags.length < CONFIG.MAX_TAGS) {
-      setTags([...tags, trimmedTag]);
+  const handleAddTag = (text: string) => {
+    if (text.endsWith(',') || text.endsWith('\n')) {
+      const newTag = text.replace(/[, \n]/g, '').trim();
+      if (newTag && tags.length < CONFIG.MAX_TAGS && !tags.includes(newTag)) {
+        setTags([...tags, newTag]);
+      }
       setTagInput('');
+    } else {
+      setTagInput(text);
     }
   };
 
-  /**
-   * Handle removing a tag
-   */
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter((tag) => tag !== tagToRemove));
+  const handleRemoveTag = (tag: string) => {
+    setTags(tags.filter((t) => t !== tag));
   };
 
-  /**
-   * Validate the entry before saving
-   */
-  const validateEntry = (): boolean => {
-    if (!title.trim()) {
-      Alert.alert('Missing Title', 'Please enter a title for your entry.');
-      return false;
-    }
-    if (title.length > CONFIG.MAX_TITLE_LENGTH) {
-      Alert.alert('Title Too Long', `Title must be ${CONFIG.MAX_TITLE_LENGTH} characters or less.`);
-      return false;
-    }
-    if (!body.trim() || body.trim().length < CONFIG.MIN_BODY_LENGTH) {
-      Alert.alert('Entry Too Short', `Please write at least ${CONFIG.MIN_BODY_LENGTH} characters.`);
-      return false;
-    }
-    return true;
-  };
-
-  /**
-   * Handle saving the entry
-   */
   const handleSave = async () => {
-    if (!validateEntry() || !originalEntry) return;
+    if (!entry) return;
+    if (!title.trim()) {
+      Alert.alert('Missing Title', 'Please add a title to your entry.');
+      return;
+    }
+    if (body.trim().length < 10) {
+      Alert.alert('Too Short', 'Please write at least 10 characters in your entry.');
+      return;
+    }
+    if (!mood) {
+      Alert.alert('Select Mood', 'Please select how you are feeling.');
+      return;
+    }
 
     setIsSaving(true);
     try {
-      // Prepare update data
-      const updateData: {
-        title: string;
-        body: string;
-        mood: Mood;
-        tags: string[];
-        imageUrl?: string | null;
-        imagePath?: string | null;
-      } = {
-        title: title.trim(),
-        body: body.trim(),
-        mood: selectedMood,
-        tags,
-      };
+      let finalImageUrl = imageUrl;
+      let finalImagePath = imageUrl;
 
-      // Handle image upload if there's a new local image
-      if (imageState.localUri) {
-        try {
-          const uploadResult = await upload(originalEntry.userId, originalEntry.id);
-          if (uploadResult) {
-            updateData.imageUrl = uploadResult.publicUrl;
-            updateData.imagePath = uploadResult.storagePath;
-          }
-        } catch (uploadError) {
-          console.error('Failed to upload image:', uploadError);
-          Alert.alert(
-            'Image Upload Failed',
-            'Your entry will be saved without the new image. You can try adding the image again later.'
-          );
+      if (imageUri && imageUri !== entry.imageUrl && userId) {
+        if (entry.imagePath) {
+          await clearImage();
         }
-      } else if (!imageState.hasImage && originalEntry.imageUrl) {
-        // Image was removed
-        updateData.imageUrl = null;
-        updateData.imagePath = null;
+        const tempEntryId = entry.id;
+        const uploadResult = await uploadToSupabase(userId, tempEntryId);
+        if (uploadResult) {
+          finalImageUrl = uploadResult.imageUrl;
+          finalImagePath = uploadResult.imagePath;
+        }
       }
 
-      await editEntry(originalEntry.id, updateData);
+      await editEntry(entry.id, {
+        title: title.trim(),
+        body: body.trim(),
+        mood,
+        imageUrl: finalImageUrl,
+        imagePath: finalImagePath,
+        tags,
+      });
+
       router.back();
-    } catch (error) {
-      console.error('Failed to save entry:', error);
+    } catch (err) {
+      console.error('Save failed:', err);
       Alert.alert('Error', 'Failed to save changes. Please try again.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  /**
-   * Handle canceling the edit
-   */
-  const handleCancel = useCallback(() => {
-    if (hasChanges) {
-      Alert.alert(
-        'Discard Changes?',
-        'You have unsaved changes. Are you sure you want to discard them?',
-        [
-          { text: 'Keep Editing', style: 'cancel' },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: async () => {
-              // Clear any newly selected image
-              if (imageState.localUri) {
-                await clearImage();
-              }
-              router.back();
-            },
-          },
-        ]
-      );
-    } else {
-      router.back();
-    }
-  }, [hasChanges, imageState.localUri, clearImage]);
-
-  /**
-   * Handle removing the image
-   */
-  const handleRemoveImage = async () => {
-    Alert.alert(
-      'Remove Photo?',
-      'Are you sure you want to remove this photo?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            await clearImage();
-          },
-        },
-      ]
-    );
-  };
-
-  /**
-   * Show loading state
-   */
-  if (isLoading || contextLoading) {
+  if (!entry) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.accent} />
-          <Text style={styles.loadingText}>Loading entry...</Text>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+          </TouchableOpacity>
         </View>
-      </SafeAreaView>
-    );
-  }
-
-  /**
-   * Show not found state
-   */
-  if (!originalEntry) {
-    return (
-      <SafeAreaView style={styles.container}>
         <View style={styles.notFound}>
-          <Ionicons name="document-text-outline" size={64} color={COLORS.border} />
           <Text style={styles.notFoundText}>Entry not found</Text>
-          <Pressable
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </Pressable>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Custom Header */}
-      <View style={styles.header}>
-        <Pressable style={styles.headerButton} onPress={handleCancel}>
-          <Ionicons name="close" size={24} color={COLORS.textPrimary} />
-        </Pressable>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <LoadingOverlay visible={isSaving} message="Saving changes..." />
+
+      <View style={[styles.header, { paddingTop: insets.top + SPACING.sm }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Entry</Text>
-        <View style={styles.headerButton} />
+        <TouchableOpacity
+          onPress={handleSave}
+          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+          disabled={isSaving}
+        >
+          <Text style={styles.saveButtonText}>Save</Text>
+        </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoid}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={100}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled"
       >
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Mood Selector */}
-          <MoodSelector
-            selectedMood={selectedMood}
-            onMoodSelect={setSelectedMood}
-          />
+        <MoodSelector selectedMood={mood} onSelect={setMood} />
 
-          {/* Title Input */}
-          <View style={styles.section}>
-            <TextInput
-              style={styles.titleInput}
-              placeholder="What's on your mind?"
-              placeholderTextColor={COLORS.textSecondary}
-              value={title}
-              onChangeText={setTitle}
-              maxLength={CONFIG.MAX_TITLE_LENGTH}
-            />
-            <Text style={styles.charCount}>
-              {title.length}/{CONFIG.MAX_TITLE_LENGTH}
-            </Text>
-          </View>
+        <TextInput
+          style={styles.titleInput}
+          placeholder="What's on your mind?"
+          placeholderTextColor={COLORS.textMuted}
+          value={title}
+          onChangeText={setTitle}
+          maxLength={CONFIG.MAX_TITLE_LENGTH}
+          returnKeyType="next"
+        />
 
-          {/* Body Input */}
-          <View style={styles.section}>
-            <TextInput
-              style={styles.bodyInput}
-              placeholder="Write your entry..."
-              placeholderTextColor={COLORS.textSecondary}
-              value={body}
-              onChangeText={setBody}
-              multiline
-              textAlignVertical="top"
-            />
-            <Text style={styles.wordCount}>{wordCount} words</Text>
-          </View>
+        <TextInput
+          style={styles.bodyInput}
+          placeholder="Write your entry..."
+          placeholderTextColor={COLORS.textMuted}
+          value={body}
+          onChangeText={setBody}
+          multiline
+          textAlignVertical="top"
+          returnKeyType="next"
+        />
 
-          {/* Tags Input */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Tags (optional)</Text>
-            <View style={styles.tagsInputContainer}>
-              <TextInput
-                style={styles.tagInput}
-                placeholder="Add a tag..."
-                placeholderTextColor={COLORS.textSecondary}
-                value={tagInput}
-                onChangeText={setTagInput}
-                onSubmitEditing={handleAddTag}
-                returnKeyType="done"
-              />
-              <Pressable
-                style={[
-                  styles.addTagButton,
-                  (!tagInput.trim() || tags.length >= CONFIG.MAX_TAGS) &&
-                    styles.addTagButtonDisabled,
-                ]}
-                onPress={handleAddTag}
-                disabled={!tagInput.trim() || tags.length >= CONFIG.MAX_TAGS}
-              >
-                <Ionicons name="add" size={20} color={COLORS.surface} />
-              </Pressable>
-            </View>
-            {tags.length > 0 && (
-              <View style={styles.tagsContainer}>
-                {tags.map((tag) => (
-                  <View key={tag} style={styles.tag}>
-                    <Text style={styles.tagText}>#{tag}</Text>
-                    <Pressable onPress={() => handleRemoveTag(tag)}>
-                      <Ionicons name="close" size={16} color={COLORS.textSecondary} />
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
+        <View style={styles.wordCount}>
+          <Text style={styles.wordCountText}>
+            {body.trim() ? body.trim().split(/\s+/).length : 0} words
+          </Text>
+        </View>
 
-          {/* Image Attachment */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Photo</Text>
           <ImageAttachment
-            localUri={imageState.localUri}
-            remoteUrl={imageState.remoteUrl}
+            imageUri={imageUri || imageUrl}
             isUploading={isUploading}
             uploadProgress={uploadProgress}
             onPickImage={pickImage}
-            onTakePhoto={takePhoto}
-            onRemoveImage={handleRemoveImage}
+            onRemoveImage={() => {
+              clearImage();
+              setImageUri(null);
+              setImageUrl(null);
+            }}
           />
-        </ScrollView>
-
-        {/* Bottom Actions */}
-        <View style={styles.bottomActions}>
-          <Pressable
-            style={({ pressed }) => [styles.cancelButton, pressed && styles.buttonPressed]}
-            onPress={handleCancel}
-            disabled={isSaving}
-          >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.saveButton,
-              pressed && styles.buttonPressed,
-              (isSaving || !hasChanges) && styles.saveButtonDisabled,
-            ]}
-            onPress={handleSave}
-            disabled={isSaving || !hasChanges}
-          >
-            <Text style={styles.saveButtonText}>
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </Text>
-          </Pressable>
         </View>
-      </KeyboardAvoidingView>
 
-      {/* Loading Overlay */}
-      <LoadingOverlay visible={isSaving} message="Saving changes..." />
-    </SafeAreaView>
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Tags</Text>
+          <TextInput
+            style={styles.tagInput}
+            placeholder="Add tags (comma separated)"
+            placeholderTextColor={COLORS.textMuted}
+            value={tagInput}
+            onChangeText={handleAddTag}
+          />
+          {tags.length > 0 && (
+            <View style={styles.tagsContainer}>
+              {tags.map((tag) => (
+                <TouchableOpacity
+                  key={tag}
+                  style={styles.tag}
+                  onPress={() => handleRemoveTag(tag)}
+                >
+                  <Text style={styles.tagText}>{tag}</Text>
+                  <Ionicons name="close-circle" size={14} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -430,190 +254,115 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
-    backgroundColor: COLORS.surface,
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.sm,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: COLORS.borderLight,
+    backgroundColor: COLORS.surface,
   },
-  headerButton: {
+  backButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: FONT_SIZES.lg,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-  },
-  keyboardAvoid: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: SPACING.lg,
-    paddingBottom: SPACING.xxxl,
-  },
-  section: {
-    marginBottom: SPACING.xl,
-  },
-  sectionLabel: {
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  titleInput: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-    padding: 0,
-  },
-  charCount: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    textAlign: 'right',
-    marginTop: SPACING.xs,
-  },
-  bodyInput: {
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textPrimary,
-    lineHeight: 24,
-    minHeight: 200,
-    padding: SPACING.lg,
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    ...SHADOWS.sm,
-  },
-  wordCount: {
-    fontSize: FONT_SIZES.xs,
-    color: COLORS.textSecondary,
-    textAlign: 'right',
-    marginTop: SPACING.sm,
-  },
-  tagsInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  tagInput: {
-    flex: 1,
-    fontSize: FONT_SIZES.md,
-    color: COLORS.textPrimary,
-    padding: SPACING.md,
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.lg,
-    ...SHADOWS.sm,
-  },
-  addTagButton: {
-    width: 40,
-    height: 40,
-    borderRadius: BORDER_RADIUS.lg,
-    backgroundColor: COLORS.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addTagButtonDisabled: {
-    backgroundColor: COLORS.border,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: SPACING.md,
-    gap: SPACING.sm,
-  },
-  tag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: SPACING.xs,
-    paddingHorizontal: SPACING.md,
-    backgroundColor: COLORS.surface,
-    borderRadius: BORDER_RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: SPACING.xs,
-  },
-  tagText: {
-    fontSize: FONT_SIZES.sm,
-    color: COLORS.textPrimary,
-  },
-  bottomActions: {
-    flexDirection: 'row',
-    padding: SPACING.lg,
-    gap: SPACING.md,
-    backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
-    backgroundColor: COLORS.background,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: '600',
+    fontSize: FONTS.lg,
+    fontWeight: FONTS.bold,
     color: COLORS.textPrimary,
   },
   saveButton: {
-    flex: 2,
-    paddingVertical: SPACING.lg,
-    borderRadius: BORDER_RADIUS.lg,
     backgroundColor: COLORS.accent,
-    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.full,
   },
   saveButtonDisabled: {
     opacity: 0.5,
   },
   saveButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: '600',
+    fontSize: FONTS.md,
+    fontWeight: FONTS.semibold,
     color: COLORS.surface,
   },
-  buttonPressed: {
-    opacity: 0.9,
-  },
-  loadingContainer: {
+  content: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: SPACING.xxl,
   },
-  loadingText: {
-    fontSize: FONT_SIZES.md,
+  contentContainer: {
+    padding: SPACING.lg,
+    paddingBottom: 100,
+  },
+  titleInput: {
+    fontSize: FONTS.xl,
+    fontWeight: FONTS.bold,
+    color: COLORS.textPrimary,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingBottom: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  bodyInput: {
+    fontSize: FONTS.md,
+    color: COLORS.textPrimary,
+    minHeight: 200,
+    lineHeight: 24,
+    marginBottom: SPACING.sm,
+  },
+  wordCount: {
+    alignItems: 'flex-end',
+    marginBottom: SPACING.xl,
+  },
+  wordCountText: {
+    fontSize: FONTS.xs,
+    color: COLORS.textMuted,
+  },
+  section: {
+    marginBottom: SPACING.xl,
+  },
+  sectionLabel: {
+    fontSize: FONTS.sm,
+    fontWeight: FONTS.semibold,
     color: COLORS.textSecondary,
-    marginTop: SPACING.lg,
+    marginBottom: SPACING.sm,
+  },
+  tagInput: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    fontSize: FONTS.md,
+    color: COLORS.textPrimary,
+    backgroundColor: COLORS.surface,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.accent + '15',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.full,
+    gap: SPACING.xs,
+  },
+  tagText: {
+    fontSize: FONTS.sm,
+    color: COLORS.accent,
   },
   notFound: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: SPACING.xxl,
   },
   notFoundText: {
-    fontSize: FONT_SIZES.lg,
+    fontSize: FONTS.lg,
     color: COLORS.textSecondary,
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.xl,
-  },
-  backButton: {
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.xxl,
-    backgroundColor: COLORS.accent,
-    borderRadius: BORDER_RADIUS.lg,
-  },
-  backButtonText: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: '600',
-    color: COLORS.surface,
   },
 });

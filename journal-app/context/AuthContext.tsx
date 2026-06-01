@@ -1,229 +1,78 @@
-/**
- * AuthContext
- * Provides authentication state and actions throughout the app
- * Manages user authentication state, Firebase anonymous auth, and re-lock logic
- */
-
-import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
-import { signInAnonymously, User } from 'firebase/auth';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { auth } from '../services/firebase';
-import { CONFIG } from '../constants/config';
-import { AuthState, AuthContextValue } from '../types/auth';
+import { auth, signInAnonymously } from '../services/firebase';
+import { STORAGE_KEYS } from '../constants/config';
+import { AuthContextType } from '../types/auth';
 
-/**
- * Initial authentication state
- */
-const initialState: AuthState = {
-  isAuthenticated: false,
-  lastActiveAt: null,
-  userId: null,
-  isAuthenticating: false,
-  error: null,
-};
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/**
- * Auth action types
- */
-type AuthAction =
-  | { type: 'AUTH_START' }
-  | { type: 'AUTH_SUCCESS'; payload: { userId: string } }
-  | { type: 'AUTH_FAILURE'; payload: { error: string } }
-  | { type: 'LOCK' }
-  | { type: 'REFRESH_ACTIVITY' }
-  | { type: 'CLEAR_ERROR' }
-  | { type: 'RESTORE_SESSION'; payload: { userId: string } };
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [lastActiveAt, setLastActiveAt] = useState<number | null>(null);
 
-/**
- * Auth reducer function
- */
-function authReducer(state: AuthState, action: AuthAction): AuthState {
-  switch (action.type) {
-    case 'AUTH_START':
-      return {
-        ...state,
-        isAuthenticating: true,
-        error: null,
-      };
-    case 'AUTH_SUCCESS':
-      return {
-        ...state,
-        isAuthenticated: true,
-        isAuthenticating: false,
-        userId: action.payload.userId,
-        lastActiveAt: Date.now(),
-        error: null,
-      };
-    case 'AUTH_FAILURE':
-      return {
-        ...state,
-        isAuthenticating: false,
-        error: action.payload.error,
-      };
-    case 'LOCK':
-      return {
-        ...state,
-        isAuthenticated: false,
-        lastActiveAt: null,
-      };
-    case 'REFRESH_ACTIVITY':
-      return {
-        ...state,
-        lastActiveAt: Date.now(),
-      };
-    case 'CLEAR_ERROR':
-      return {
-        ...state,
-        error: null,
-      };
-    case 'RESTORE_SESSION':
-      return {
-        ...state,
-        userId: action.payload.userId,
-      };
-    default:
-      return state;
-  }
-}
-
-/**
- * Auth context
- */
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-/**
- * Auth provider props
- */
-interface AuthProviderProps {
-  children: React.ReactNode;
-}
-
-/**
- * Auth provider component
- * Wraps the app and provides authentication state and actions
- */
-export function AuthProvider({ children }: AuthProviderProps) {
-  const [state, dispatch] = useReducer(authReducer, initialState);
-
-  /**
-   * Restore user ID from SecureStore on mount
-   */
   useEffect(() => {
-    restoreUserId();
+    checkExistingAuth();
   }, []);
 
-  /**
-   * Restore user ID from secure storage
-   */
-  const restoreUserId = async (): Promise<void> => {
+  async function checkExistingAuth() {
     try {
-      const storedUserId = await SecureStore.getItemAsync(CONFIG.SECURE_STORE_KEYS.USER_ID);
+      const storedUserId = await SecureStore.getItemAsync(STORAGE_KEYS.USER_ID);
       if (storedUserId) {
-        dispatch({ type: 'RESTORE_SESSION', payload: { userId: storedUserId } });
-        console.log('Restored user ID from secure storage');
+        setUserId(storedUserId);
       }
-    } catch (error) {
-      console.error('Error restoring user ID:', error);
+    } catch (err) {
+      console.error('Failed to check existing auth:', err);
     }
-  };
+  }
 
-  /**
-   * Unlock the app after successful biometric authentication
-   * Signs in anonymously to Firebase and stores the user ID
-   */
-  const unlock = useCallback(async (): Promise<void> => {
-    dispatch({ type: 'AUTH_START' });
-
+  const unlock = useCallback(async () => {
     try {
-      // Check if we already have a stored user ID
-      const storedUserId = await SecureStore.getItemAsync(CONFIG.SECURE_STORE_KEYS.USER_ID);
-
-      let userId: string;
-
-      if (storedUserId && auth.currentUser?.uid === storedUserId) {
-        // Use existing session
-        userId = storedUserId;
-        console.log('Using existing Firebase session');
+      if (!auth.currentUser) {
+        const result = await signInAnonymously(auth);
+        const uid = result.user.uid;
+        await SecureStore.setItemAsync(STORAGE_KEYS.USER_ID, uid);
+        setUserId(uid);
       } else {
-        // Sign in anonymously to Firebase
-        const userCredential = await signInAnonymously(auth);
-        userId = userCredential.user.uid;
-
-        // Store user ID in secure storage
-        await SecureStore.setItemAsync(CONFIG.SECURE_STORE_KEYS.USER_ID, userId);
-        console.log('Created new anonymous Firebase session');
+        setUserId(auth.currentUser.uid);
       }
-
-      dispatch({ type: 'AUTH_SUCCESS', payload: { userId } });
-    } catch (error) {
-      console.error('Error during unlock:', error);
-      dispatch({
-        type: 'AUTH_FAILURE',
-        payload: {
-          error: error instanceof Error ? error.message : 'Failed to authenticate',
-        },
-      });
+      setIsAuthenticated(true);
+      setLastActiveAt(Date.now());
+    } catch (err) {
+      console.error('Failed to unlock:', err);
+      throw err;
     }
   }, []);
 
-  /**
-   * Lock the app and require re-authentication
-   */
-  const lock = useCallback((): void => {
-    dispatch({ type: 'LOCK' });
-    console.log('App locked');
+  const lock = useCallback(() => {
+    setIsAuthenticated(false);
+    setLastActiveAt(null);
   }, []);
 
-  /**
-   * Update the last active timestamp
-   * Called when user interacts with the app
-   */
-  const refreshActivity = useCallback((): void => {
-    dispatch({ type: 'REFRESH_ACTIVITY' });
+  const refreshActivity = useCallback(() => {
+    setLastActiveAt(Date.now());
   }, []);
-
-  /**
-   * Clear any authentication errors
-   */
-  const clearError = useCallback((): void => {
-    dispatch({ type: 'CLEAR_ERROR' });
-  }, []);
-
-  /**
-   * Context value
-   */
-  const contextValue: AuthContextValue = {
-    // State
-    isAuthenticated: state.isAuthenticated,
-    lastActiveAt: state.lastActiveAt,
-    userId: state.userId,
-    isAuthenticating: state.isAuthenticating,
-    error: state.error,
-
-    // Actions
-    unlock,
-    lock,
-    refreshActivity,
-    clearError,
-  };
 
   return (
-    <AuthContext.Provider value={contextValue}>
+    <AuthContext.Provider
+      value={{
+        isAuthenticated,
+        userId,
+        lastActiveAt,
+        unlock,
+        lock,
+        refreshActivity,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
-/**
- * Hook to access auth context
- * @throws Error if used outside of AuthProvider
- */
-export function useAuth(): AuthContextValue {
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 }
-
-export default AuthContext;
