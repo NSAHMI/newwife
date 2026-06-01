@@ -1,9 +1,24 @@
 import { useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadImage, deleteImage as deleteImageService } from '../services/mediaService';
+import * as FileSystem from 'expo-file-system/legacy';
+import { uploadImage, deleteImage } from '../services/mediaService';
 import { CONFIG } from '../constants/config';
 
-export function useImageUpload() {
+interface UseImageUploadReturn {
+  imageUri: string | null;
+  imageUrl: string | null;
+  imagePath: string | null;
+  isUploading: boolean;
+  uploadProgress: number;
+  pickImage: () => Promise<string | null>;
+  uploadToSupabase: (userId: string, entryId: string) => Promise<{ imageUrl: string; imagePath: string } | null>;
+  clearImage: () => Promise<void>;
+  setImageUri: (uri: string | null) => void;
+  setImageUrl: (url: string | null) => void;
+  setImagePath: (path: string | null) => void;
+}
+
+export function useImageUpload(): UseImageUploadReturn {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imagePath, setImagePath] = useState<string | null>(null);
@@ -18,49 +33,56 @@ export function useImageUpload() {
       aspect: [4, 3],
     });
 
-    if (result.canceled) return null;
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      const fileInfo = await FileSystem.getInfoAsync(asset.uri);
 
-    const asset = result.assets[0];
-    if (asset.fileSize && asset.fileSize > CONFIG.MAX_IMAGE_SIZE_MB * 1024 * 1024) {
-      throw new Error(`Image must be less than ${CONFIG.MAX_IMAGE_SIZE_MB}MB`);
+      if (fileInfo.exists && fileInfo.size > CONFIG.MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+        throw new Error(`Image exceeds ${CONFIG.MAX_IMAGE_SIZE_MB}MB limit`);
+      }
+
+      setImageUri(asset.uri);
+      return asset.uri;
     }
-
-    setImageUri(asset.uri);
-    return asset.uri;
+    return null;
   }, []);
 
-  const upload = useCallback(
-    async (userId: string, entryId: string, uri: string): Promise<void> => {
+  const uploadToSupabase = useCallback(
+    async (userId: string, entryId: string) => {
+      if (!imageUri) return null;
+
       setIsUploading(true);
       setUploadProgress(0);
 
       try {
         setUploadProgress(30);
-        const { publicUrl, storagePath } = await uploadImage(userId, entryId, uri);
+        const result = await uploadImage(userId, entryId, imageUri);
         setUploadProgress(100);
-        setImageUrl(publicUrl);
-        setImagePath(storagePath);
+        setImageUrl(result.publicUrl);
+        setImagePath(result.storagePath);
+        return { imageUrl: result.publicUrl, imagePath: result.storagePath };
       } catch (err) {
-        setIsUploading(false);
+        console.error('Upload failed:', err);
         throw err;
+      } finally {
+        setIsUploading(false);
+        setTimeout(() => setUploadProgress(0), 1000);
       }
     },
-    []
+    [imageUri]
   );
 
-  const clearImage = useCallback(async (): Promise<void> => {
+  const clearImage = useCallback(async () => {
     if (imagePath) {
       try {
-        await deleteImageService(imagePath);
+        await deleteImage(imagePath);
       } catch (err) {
-        console.error('Failed to delete image from storage:', err);
+        console.error('Failed to delete image:', err);
       }
     }
     setImageUri(null);
     setImageUrl(null);
     setImagePath(null);
-    setIsUploading(false);
-    setUploadProgress(0);
   }, [imagePath]);
 
   return {
@@ -70,7 +92,10 @@ export function useImageUpload() {
     isUploading,
     uploadProgress,
     pickImage,
-    upload,
+    uploadToSupabase,
     clearImage,
+    setImageUri,
+    setImageUrl,
+    setImagePath,
   };
 }

@@ -44,7 +44,11 @@ export default function EntryDetailScreen() {
     if (!entry) return;
     setIsDeleting(true);
     try {
-      await removeEntry(entry.id, entry.imageUrl, entry.imagePath);
+      if (entry.imagePath) {
+        const { deleteImage } = await import('../../../services/mediaService');
+        await deleteImage(entry.imagePath);
+      }
+      await removeEntry(entry.id);
       setShowDeleteModal(false);
       router.back();
     } catch (err) {
@@ -151,7 +155,7 @@ export default function EntryDetailScreen() {
         title="Delete Entry"
         message="Are you sure you want to delete this entry? This action cannot be undone."
         confirmLabel="Delete"
-        isDestructive
+        destructive
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteModal(false)}
       />

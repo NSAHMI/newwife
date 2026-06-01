@@ -3,11 +3,14 @@ import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
 
 interface LoadingOverlayProps {
+  visible?: boolean;
   message?: string;
   fullScreen?: boolean;
 }
 
-export function LoadingOverlay({ message, fullScreen = true }: LoadingOverlayProps) {
+export function LoadingOverlay({ visible = true, message, fullScreen = true }: LoadingOverlayProps) {
+  if (!visible) return null;
+
   if (!fullScreen) {
     return (
       <View style={styles.inline}>
