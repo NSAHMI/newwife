@@ -1,5 +1,3 @@
-import { Timestamp } from 'firebase/firestore';
-
 export type Mood = 'happy' | 'calm' | 'sad' | 'angry' | 'anxious' | 'grateful';
 
 export interface MoodConfig {
@@ -16,8 +14,8 @@ export interface Entry {
   mood: Mood;
   imageUrl: string | null;
   imagePath: string | null;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;
+  updatedAt: string;
   dateKey: string;
   tags: string[];
   wordCount: number;

@@ -1,13 +1,15 @@
 import { Entry, EntrySection } from '../types/entry';
 import { getMonthKey, getSectionTitle } from './dateUtils';
 
+function toMillis(dateStr: string): number {
+  return new Date(dateStr).getTime() || 0;
+}
+
 export function groupEntriesByMonth(entries: Entry[]): EntrySection[] {
   const grouped = new Map<string, Entry[]>();
 
   const sortedEntries = [...entries].sort((a, b) => {
-    const aTime = a.createdAt?.toMillis?.() || 0;
-    const bTime = b.createdAt?.toMillis?.() || 0;
-    return bTime - aTime;
+    return toMillis(b.createdAt) - toMillis(a.createdAt);
   });
 
   for (const entry of sortedEntries) {
@@ -34,8 +36,6 @@ export function getEntriesForDate(entries: Entry[], dateKey: string): Entry[] {
   return entries
     .filter((entry) => entry.dateKey === dateKey)
     .sort((a, b) => {
-      const aTime = a.createdAt?.toMillis?.() || 0;
-      const bTime = b.createdAt?.toMillis?.() || 0;
-      return bTime - aTime;
+      return toMillis(b.createdAt) - toMillis(a.createdAt);
     });
 }
