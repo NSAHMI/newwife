@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Entry, MOOD_COLORS } from '../../types/entry';
-import { COLORS, FONTS, SPACING, RADIUS, SHADOWS } from '../../constants/theme';
+import { Entry } from '../../types/entry';
+import { COLORS, FONTS, SPACING, RADIUS, SHADOWS, MOOD_COLORS } from '../../constants/theme';
 import { formatShortDate } from '../../utils/dateUtils';
 
 interface EntryCardProps {

@@ -1,8 +1,13 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { auth, signInAnonymously } from '../services/firebase';
 import { STORAGE_KEYS } from '../constants/config';
 import { AuthContextType } from '../types/auth';
+
+function generateId(): string {
+  const ts = Date.now().toString(36);
+  const rand = Math.random().toString(36).substring(2, 10);
+  return `${ts}-${rand}`;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -28,14 +33,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const unlock = useCallback(async () => {
     try {
-      if (!auth.currentUser) {
-        const result = await signInAnonymously(auth);
-        const uid = result.user.uid;
-        await SecureStore.setItemAsync(STORAGE_KEYS.USER_ID, uid);
-        setUserId(uid);
-      } else {
-        setUserId(auth.currentUser.uid);
+      let storedUserId = await SecureStore.getItemAsync(STORAGE_KEYS.USER_ID);
+      if (!storedUserId) {
+        storedUserId = generateId();
+        await SecureStore.setItemAsync(STORAGE_KEYS.USER_ID, storedUserId);
       }
+
+      setUserId(storedUserId);
       setIsAuthenticated(true);
       setLastActiveAt(Date.now());
     } catch (err) {

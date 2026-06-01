@@ -13,15 +13,15 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useJournal } from '../../../context/JournalContext';
-import { useAuth } from '../../../context/AuthContext';
-import { useImageUpload } from '../../../hooks/useImageUpload';
-import { MoodSelector } from '../../../components/entry/MoodSelector';
-import { ImageAttachment } from '../../../components/entry/ImageAttachment';
-import { LoadingOverlay } from '../../../components/ui/LoadingOverlay';
-import { COLORS, FONTS, SPACING, RADIUS } from '../../../constants/theme';
-import { Mood } from '../../../types/entry';
-import { CONFIG } from '../../../constants/config';
+import { useJournal } from '../../../../context/JournalContext';
+import { useAuth } from '../../../../context/AuthContext';
+import { useImageUpload } from '../../../../hooks/useImageUpload';
+import { MoodSelector } from '../../../../components/entry/MoodSelector';
+import { ImageAttachment } from '../../../../components/entry/ImageAttachment';
+import { LoadingOverlay } from '../../../../components/ui/LoadingOverlay';
+import { COLORS, FONTS, SPACING, RADIUS } from '../../../../constants/theme';
+import { Mood } from '../../../../types/entry';
+import { CONFIG } from '../../../../constants/config';
 
 export default function EditEntryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -174,7 +174,7 @@ export default function EditEntryScreen() {
         contentContainerStyle={styles.contentContainer}
         keyboardShouldPersistTaps="handled"
       >
-        <MoodSelector selectedMood={mood} onSelect={setMood} />
+        <MoodSelector selected={mood} onSelect={setMood} />
 
         <TextInput
           style={styles.titleInput}

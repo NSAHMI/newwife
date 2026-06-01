@@ -11,7 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useAuth } from '../../context/AuthContext';
 import { useJournal } from '../../context/JournalContext';
@@ -73,7 +73,7 @@ export default function SettingsScreen() {
         content += '\n';
       }
 
-      const fileUri = FileSystem.documentDirectory + 'journal_export.txt';
+      const fileUri = `${FileSystem.documentDirectory}journal_export.txt`;
       await FileSystem.writeAsStringAsync(fileUri, content, {
         encoding: FileSystem.EncodingType.UTF8,
       });
@@ -212,11 +212,11 @@ export default function SettingsScreen() {
       <ConfirmModal
         visible={showClearAll}
         title="Clear All Data"
-        message="This will permanently delete ALL your journal entries and images. This action cannot be undone."
-        confirmLabel="Delete Everything"
+        message="This will permanently delete all your entries and settings. This action cannot be undone."
+        confirmLabel="Clear Everything"
+        destructive
         onConfirm={handleClearAll}
         onCancel={() => setShowClearAll(false)}
-        destructive
       />
     </ScrollView>
   );

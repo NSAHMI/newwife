@@ -1,18 +1,20 @@
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 
-export function formatDate(date: Date | { toDate: () => Date }): string {
-  const d = 'toDate' in date ? date.toDate() : date;
-  return format(d, 'EEEE, MMMM d, yyyy');
+function toDate(date: Date | string): Date {
+  if (typeof date === 'string') return parseISO(date);
+  return date;
 }
 
-export function formatShortDate(date: Date | { toDate: () => Date }): string {
-  const d = 'toDate' in date ? date.toDate() : date;
-  return format(d, 'MMM d');
+export function formatDate(date: Date | string): string {
+  return format(toDate(date), 'EEEE, MMMM d, yyyy');
 }
 
-export function formatTime(date: Date | { toDate: () => Date }): string {
-  const d = 'toDate' in date ? date.toDate() : date;
-  return format(d, 'h:mm a');
+export function formatShortDate(date: Date | string): string {
+  return format(toDate(date), 'MMM d');
+}
+
+export function formatTime(date: Date | string): string {
+  return format(toDate(date), 'h:mm a');
 }
 
 export function toDateKey(date: Date): string {

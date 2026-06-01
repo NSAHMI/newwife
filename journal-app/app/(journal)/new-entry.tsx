@@ -37,7 +37,7 @@ export default function NewEntryScreen() {
     isUploading,
     uploadProgress,
     pickImage,
-    upload,
+    uploadToSupabase,
     clearImage,
   } = useImageUpload();
 
@@ -84,7 +84,7 @@ export default function NewEntryScreen() {
 
       if (imageUri && !imageUrl && userId) {
         const entryId = `temp_${Date.now()}`;
-        await upload(userId, entryId, imageUri);
+        await uploadToSupabase(userId, entryId);
         finalImageUrl = imageUrl;
         finalImagePath = imagePath;
       }

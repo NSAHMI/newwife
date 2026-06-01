@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
-import { Mood, MOOD_COLORS } from '../../types/entry';
-import { COLORS, FONTS, SPACING, RADIUS } from '../../constants/theme';
+import { Mood } from '../../types/entry';
+import { COLORS, FONTS, SPACING, RADIUS, MOOD_COLORS } from '../../constants/theme';
 
 interface MoodSelectorProps {
   selected: Mood | null;
