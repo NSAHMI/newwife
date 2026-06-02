@@ -16,6 +16,8 @@ const MOODS = {
 
 // ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
+  createParticles();
+
   const saved = localStorage.getItem('user_id');
   if (saved) {
     currentUser = saved;
@@ -29,13 +31,50 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fab').addEventListener('click', () => openEditor());
   document.getElementById('modalCancel').addEventListener('click', hideModal);
   document.getElementById('modalConfirm').addEventListener('click', confirmModal);
+
+  const searchToggle = document.getElementById('searchToggle');
+  const searchWrap = document.getElementById('searchWrap');
+  if (searchToggle && searchWrap) {
+    searchToggle.addEventListener('click', () => {
+      searchWrap.classList.toggle('mobile-open');
+      if (searchWrap.classList.contains('mobile-open')) {
+        searchWrap.querySelector('input').focus();
+      }
+    });
+  }
+
+  const searchInput = document.getElementById('searchInput');
+  if (searchInput) {
+    let debounce;
+    searchInput.addEventListener('input', () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => renderEntries(searchInput.value.trim().toLowerCase()), 200);
+    });
+  }
 });
+
+// ── Particles ──
+function createParticles() {
+  const container = document.getElementById('lockParticles');
+  if (!container) return;
+  for (let i = 0; i < 20; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const size = Math.random() * 60 + 20;
+    p.style.width = size + 'px';
+    p.style.height = size + 'px';
+    p.style.left = Math.random() * 100 + '%';
+    p.style.animationDuration = (Math.random() * 15 + 10) + 's';
+    p.style.animationDelay = (Math.random() * 10) + 's';
+    container.appendChild(p);
+  }
+}
 
 // ── Auth ──
 function handleUnlock() {
   const btn = document.getElementById('unlockBtn');
   btn.disabled = true;
-  btn.textContent = 'Authenticating...';
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg> Authenticating...`;
 
   let deviceId = localStorage.getItem('device_id');
   if (!deviceId) {
@@ -56,10 +95,10 @@ function handleUnlock() {
         unlock();
       }
     })
-    .catch(err => {
+    .catch(() => {
       showToast('Connection failed. Is the server running?', true);
       btn.disabled = false;
-      btn.textContent = 'Unlock Journal';
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg> Unlock Journal`;
     });
 }
 
@@ -74,7 +113,7 @@ function lock() {
   document.getElementById('app').classList.remove('visible');
   document.getElementById('detailView').classList.remove('active');
   document.getElementById('unlockBtn').disabled = false;
-  document.getElementById('unlockBtn').textContent = 'Unlock Journal';
+  document.getElementById('unlockBtn').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg> Unlock Journal`;
 }
 
 // ── Navigation ──
@@ -106,23 +145,25 @@ function loadEntries() {
       entries = Array.isArray(data) ? data : [];
       renderEntries();
     })
-    .catch(err => {
-      console.error('Failed to load entries:', err);
-    });
+    .catch(() => {});
 }
 
-function renderEntries() {
+function renderEntries(query = '') {
   const container = document.getElementById('entriesList');
-  const groups = groupByMonth(entries);
+  let filtered = entries;
+  if (query) {
+    filtered = entries.filter(e =>
+      (e.title && e.title.toLowerCase().includes(query)) ||
+      (e.body && e.body.toLowerCase().includes(query)) ||
+      (e.tags && e.tags.some(t => t.toLowerCase().includes(query)))
+    );
+  }
+  const groups = groupByMonth(filtered);
 
-  if (entries.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">📖</div>
-        <h2>Your journal is empty</h2>
-        <p>Start writing your first entry.</p>
-        <button class="btn-primary" onclick="openEditor()">Write Today's Entry</button>
-      </div>`;
+  if (filtered.length === 0) {
+    container.innerHTML = query
+      ? `<div class="empty-state"><div class="empty-icon">🔍</div><h2>No results found</h2><p>Try a different search term.</p></div>`
+      : `<div class="empty-state"><div class="empty-icon">📖</div><h2>Your journal is empty</h2><p>Start writing your first entry.</p><button class="btn-primary" onclick="openEditor()">Write Today's Entry</button></div>`;
     return;
   }
 
@@ -294,7 +335,6 @@ function openEditor(entryId = null) {
           <input type="text" id="tagInput" placeholder="Add tag..."
                  onkeydown="handleTagKey(event)">
         </div>
-        <small style="color:var(--text-muted);font-size:0.75rem">Separate tags with commas</small>
       </div>
     </div>`;
 
@@ -305,8 +345,6 @@ function openEditor(entryId = null) {
 
   document.getElementById('entryBody').addEventListener('input', updateWordCount);
   updateWordCount();
-
-  document.getElementById('selectedMood').value = selectedMood;
 }
 
 function closeEditor() {
@@ -331,7 +369,7 @@ function updateWordCount() {
   const body = document.getElementById('entryBody')?.value || '';
   const count = body.trim() ? body.trim().split(/\s+/).length : 0;
   const el = document.getElementById('wordCount');
-  if (el) el.textContent = `${count} words`;
+  if (el) el.textContent = `${count} word${count !== 1 ? 's' : ''}`;
 }
 
 function handleTagKey(e) {
@@ -350,7 +388,7 @@ function handleTagKey(e) {
   }
 }
 
-function removeTag(el, tag) {
+function removeTag(el) {
   el.parentElement.remove();
 }
 

@@ -1,104 +1,163 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Journal — Personal Diary</title>
-  <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Journal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-
-  <!-- Lock Screen -->
-  <div class="lock-screen" id="lockScreen">
-    <div class="lock-card">
-      <div class="lock-icon">📖</div>
-      <h1>Journal</h1>
-      <p>Your private thoughts, secured</p>
-      <button class="unlock-btn" id="unlockBtn">Unlock Journal</button>
+  <!-- ═══ Lock Screen ═══ -->
+  <div id="lockScreen" class="lock-screen">
+    <div class="lock-particles" id="lockParticles"></div>
+    <div class="lock-content">
+      <div class="lock-icon-wrap">
+        <svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </div>
+      <h1 class="lock-title">Personal Journal</h1>
+      <p class="lock-subtitle">Your private space for thoughts & memories</p>
+      <button id="unlockBtn" class="lock-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+        </svg>
+        Unlock Journal
+      </button>
     </div>
   </div>
 
-  <!-- Main App -->
-  <div class="app" id="app">
-
+  <!-- ═══ Main App ═══ -->
+  <div id="app" class="app">
     <!-- Header -->
-    <div class="app-header">
-      <h1><span class="header-icon">📖</span> Journal</h1>
-      <div class="nav-tabs">
-        <button class="nav-tab active" data-tab="list">Journal</button>
-        <button class="nav-tab" data-tab="calendar">Calendar</button>
-        <button class="nav-tab" data-tab="new">New Entry</button>
-        <button class="nav-tab" data-tab="settings">Settings</button>
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="header-brand">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+          </svg>
+          <span>Journal</span>
+        </div>
+        <div class="header-search" id="searchWrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+          </svg>
+          <input type="text" id="searchInput" placeholder="Search entries..." />
+        </div>
+        <button class="header-icon-btn" id="searchToggle" title="Search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+          </svg>
+        </button>
       </div>
-    </div>
+    </header>
 
-    <!-- List View -->
-    <div class="section active" id="listSection">
-      <div class="loading">Loading entries...</div>
-    </div>
+    <!-- Tab Content -->
+    <main class="app-main">
+      <!-- Journal List -->
+      <section id="listSection" class="section active">
+        <div id="entriesList" class="entries-list"></div>
+      </section>
 
-    <!-- Calendar View -->
-    <div class="section" id="calendarSection">
-      <div id="calendarGrid" class="calendar-grid"></div>
-      <div id="calendarEntries"></div>
-    </div>
-
-    <!-- Settings View -->
-    <div class="section" id="settingsSection">
-      <div class="section-title">Storage</div>
-      <div class="settings-card">
-        <div class="settings-row">
-          <span class="label"><span class="icon">📊</span> Entries</span>
-          <span class="value" id="statsEntries">0</span>
+      <!-- Calendar -->
+      <section id="calendarSection" class="section">
+        <div class="calendar-wrap">
+          <div id="calendarGrid" class="calendar-grid"></div>
+          <div id="calendarEntries" class="calendar-entries"></div>
         </div>
-        <div class="settings-row">
-          <span class="label"><span class="icon">📝</span> Total Words</span>
-          <span class="value" id="statsWords">0</span>
+      </section>
+
+      <!-- Settings -->
+      <section id="settingsSection" class="section">
+        <div class="settings-wrap">
+          <div class="settings-group">
+            <div class="settings-label">Statistics</div>
+            <div class="settings-row">
+              <div class="stat-card">
+                <div class="stat-value" id="statsEntries">0</div>
+                <div class="stat-label">Entries</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="statsWords">0</div>
+                <div class="stat-label">Words</div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-group">
+            <div class="settings-label">Data</div>
+            <button class="settings-action" onclick="exportJournal()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Export Journal
+            </button>
+            <button class="settings-action danger" onclick="deleteAllData()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+              Clear All Data
+            </button>
+          </div>
+          <div class="settings-group">
+            <div class="settings-label">About</div>
+            <p class="settings-about">Personal Journal — a private space for your thoughts and memories. All data is stored locally on your device's server.</p>
+          </div>
         </div>
-        <div class="settings-row">
-          <button class="btn-lock" onclick="exportJournal()">📥 Export Journal</button>
-        </div>
-      </div>
+      </section>
 
-      <div class="section-title">About</div>
-      <div class="settings-card">
-        <div class="settings-row">
-          <span class="label"><span class="icon">ℹ️</span> Version</span>
-          <span class="value">1.0.0</span>
-        </div>
-      </div>
-
-      <button class="btn-danger" onclick="deleteAllData()" style="border-radius:12px;margin-top:1.5rem">
-        🗑️ Clear All Data
-      </button>
-
-      <button class="btn-lock" onclick="lock()" style="margin-top:0.5rem;border-radius:12px">
-        🔒 Lock Now
-      </button>
-    </div>
-
-    <!-- Detail / Editor View -->
-    <div class="detail-view" id="detailView"></div>
+      <!-- Detail / Editor Overlay -->
+      <div id="detailView" class="detail-view"></div>
+    </main>
 
     <!-- FAB -->
-    <button class="fab" id="fab" onclick="openEditor()">✏️</button>
+    <button id="fab" class="fab" title="New Entry">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="24" height="24">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+    </button>
+
+    <!-- Bottom Nav -->
+    <nav class="bottom-nav">
+      <button class="nav-tab active" data-tab="list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <span>Entries</span>
+      </button>
+      <button class="nav-tab" data-tab="calendar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        <span>Calendar</span>
+      </button>
+      <button class="nav-tab" data-tab="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <span>Settings</span>
+      </button>
+    </nav>
   </div>
 
-  <!-- Confirm Modal -->
-  <div class="modal-overlay" id="modal">
-    <div class="modal">
-      <h3 id="modalTitle">Confirm</h3>
-      <p id="modalMessage">Are you sure?</p>
+  <!-- Modal -->
+  <div id="modal" class="modal-overlay">
+    <div class="modal-card">
+      <h3 id="modalTitle" class="modal-title"></h3>
+      <p id="modalMessage" class="modal-message"></p>
       <div class="modal-actions">
-        <button class="btn-cancel" id="modalCancel">Cancel</button>
-        <button class="btn-confirm" id="modalConfirm">Confirm</button>
+        <button id="modalCancel" class="btn-cancel">Cancel</button>
+        <button id="modalConfirm" class="btn-confirm">Confirm</button>
       </div>
     </div>
   </div>
 
   <!-- Toast -->
-  <div class="toast" id="toast"></div>
+  <div id="toast" class="toast"></div>
 
   <script src="js/app.js"></script>
 </body>
