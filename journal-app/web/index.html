@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Journal — Personal Diary</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
+</head>
+<body>
+
+  <!-- Lock Screen -->
+  <div class="lock-screen" id="lockScreen">
+    <div class="lock-card">
+      <div class="lock-icon">📖</div>
+      <h1>Journal</h1>
+      <p>Your private thoughts, secured</p>
+      <button class="unlock-btn" id="unlockBtn">Unlock Journal</button>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div class="app" id="app">
+
+    <!-- Header -->
+    <div class="app-header">
+      <h1><span class="header-icon">📖</span> Journal</h1>
+      <div class="nav-tabs">
+        <button class="nav-tab active" data-tab="list">Journal</button>
+        <button class="nav-tab" data-tab="calendar">Calendar</button>
+        <button class="nav-tab" data-tab="new">New Entry</button>
+        <button class="nav-tab" data-tab="settings">Settings</button>
+      </div>
+    </div>
+
+    <!-- List View -->
+    <div class="section active" id="listSection">
+      <div class="loading">Loading entries...</div>
+    </div>
+
+    <!-- Calendar View -->
+    <div class="section" id="calendarSection">
+      <div id="calendarGrid" class="calendar-grid"></div>
+      <div id="calendarEntries"></div>
+    </div>
+
+    <!-- Settings View -->
+    <div class="section" id="settingsSection">
+      <div class="section-title">Storage</div>
+      <div class="settings-card">
+        <div class="settings-row">
+          <span class="label"><span class="icon">📊</span> Entries</span>
+          <span class="value" id="statsEntries">0</span>
+        </div>
+        <div class="settings-row">
+          <span class="label"><span class="icon">📝</span> Total Words</span>
+          <span class="value" id="statsWords">0</span>
+        </div>
+        <div class="settings-row">
+          <button class="btn-lock" onclick="exportJournal()">📥 Export Journal</button>
+        </div>
+      </div>
+
+      <div class="section-title">About</div>
+      <div class="settings-card">
+        <div class="settings-row">
+          <span class="label"><span class="icon">ℹ️</span> Version</span>
+          <span class="value">1.0.0</span>
+        </div>
+      </div>
+
+      <button class="btn-danger" onclick="deleteAllData()" style="border-radius:12px;margin-top:1.5rem">
+        🗑️ Clear All Data
+      </button>
+
+      <button class="btn-lock" onclick="lock()" style="margin-top:0.5rem;border-radius:12px">
+        🔒 Lock Now
+      </button>
+    </div>
+
+    <!-- Detail / Editor View -->
+    <div class="detail-view" id="detailView"></div>
+
+    <!-- FAB -->
+    <button class="fab" id="fab" onclick="openEditor()">✏️</button>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div class="modal-overlay" id="modal">
+    <div class="modal">
+      <h3 id="modalTitle">Confirm</h3>
+      <p id="modalMessage">Are you sure?</p>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="modalCancel">Cancel</button>
+        <button class="btn-confirm" id="modalConfirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
